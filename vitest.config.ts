@@ -12,7 +12,6 @@ export default defineWorkersConfig({
       },
     },
     globals: true,
-    environment: 'miniflare',
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

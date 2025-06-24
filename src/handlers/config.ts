@@ -15,7 +15,7 @@ const ConfigSchema = z.object({
   language: z.enum(['en', 'es', 'fr', 'de', 'ja', 'zh']).default('en'),
 });
 
-type Config = z.infer<typeof ConfigSchema>;
+export type Config = z.infer<typeof ConfigSchema>;
 
 export const configHandler = {
   async get(c: Context<{ Bindings: Env }>) {
@@ -25,7 +25,7 @@ export const configHandler = {
 
     try {
       const configJson = await c.env.CONFIG.get(key);
-      
+
       if (!configJson) {
         // Return default config
         return c.json(ConfigSchema.parse({}));
@@ -53,20 +53,23 @@ export const configHandler = {
 
       await c.env.CONFIG.put(key, JSON.stringify(config));
 
-      return c.json({ 
+      return c.json({
         message: 'Configuration updated',
-        config 
+        config,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return c.json({ 
-          error: 'Invalid configuration',
-          details: error.errors 
-        }, 400);
+        return c.json(
+          {
+            error: 'Invalid configuration',
+            details: error.errors,
+          },
+          400
+        );
       }
 
       console.error('Error updating config:', error);
       return c.json({ error: 'Failed to update configuration' }, 500);
     }
-  }
+  },
 };

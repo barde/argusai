@@ -13,14 +13,14 @@ export async function checkRateLimit(
   const now = Date.now();
   const window = Math.floor(now / 60000); // 1-minute windows
   const key = `rate:${installationId}:${window}`;
-  
+
   try {
     const currentCount = await rateLimits.get(key);
     const count = currentCount ? parseInt(currentCount, 10) : 0;
 
     // Allow 60 requests per minute per installation
     const RATE_LIMIT = 60;
-    
+
     if (count >= RATE_LIMIT) {
       console.warn(`Rate limit exceeded for installation ${installationId}`);
       return false;
@@ -28,7 +28,7 @@ export async function checkRateLimit(
 
     // Increment counter with TTL
     await rateLimits.put(key, String(count + 1), {
-      expirationTtl: 120 // 2 minutes TTL
+      expirationTtl: 120, // 2 minutes TTL
     });
 
     return true;
@@ -49,7 +49,7 @@ export async function getRateLimit(
   const now = Date.now();
   const window = Math.floor(now / 60000);
   const key = `rate:${installationId}:${window}`;
-  
+
   try {
     const currentCount = await rateLimits.get(key);
     const count = currentCount ? parseInt(currentCount, 10) : 0;
@@ -58,14 +58,14 @@ export async function getRateLimit(
     return {
       limit: RATE_LIMIT,
       remaining: Math.max(0, RATE_LIMIT - count),
-      resetAt: (window + 1) * 60000
+      resetAt: (window + 1) * 60000,
     };
   } catch (error) {
     console.error('Get rate limit error:', error);
     return {
       limit: 60,
       remaining: 60,
-      resetAt: (window + 1) * 60000
+      resetAt: (window + 1) * 60000,
     };
   }
 }

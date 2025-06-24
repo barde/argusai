@@ -7,7 +7,7 @@ import type { GitHubWebhookHeaders, PullRequestEvent } from '../types/github';
 
 export async function webhookHandler(c: Context<{ Bindings: Env }>) {
   const startTime = Date.now();
-  
+
   try {
     // Extract headers
     const headers: GitHubWebhookHeaders = {
@@ -62,10 +62,7 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
     }
 
     // Check rate limits
-    const rateLimitOk = await checkRateLimit(
-      c.env.RATE_LIMITS,
-      payload.installation?.id || 0
-    );
+    const rateLimitOk = await checkRateLimit(c.env.RATE_LIMITS, payload.installation?.id || 0);
 
     if (!rateLimitOk) {
       return c.json({ error: 'Rate limit exceeded' }, 429);
@@ -94,12 +91,14 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
       deliveryId,
     });
 
-    return c.json({ 
-      message: 'Review queued',
-      deliveryId,
-      processingTime 
-    }, 200);
-
+    return c.json(
+      {
+        message: 'Review queued',
+        deliveryId,
+        processingTime,
+      },
+      200
+    );
   } catch (error) {
     console.error('Webhook handler error:', error);
     return c.json({ error: 'Internal server error' }, 500);

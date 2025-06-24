@@ -30,16 +30,16 @@ app.notFound((c) => {
 // Error handler
 app.onError((err, c) => {
   console.error('Unhandled error:', err);
-  
+
   if (c.env.SENTRY_DSN) {
     // TODO: Send to Sentry
   }
-  
+
   return c.json(
-    { 
+    {
       error: 'Internal Server Error',
-      message: c.env.ENVIRONMENT === 'development' ? err.message : undefined
-    }, 
+      message: c.env.ENVIRONMENT === 'development' ? err.message : undefined,
+    },
     500
   );
 });

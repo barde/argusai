@@ -1,16 +1,16 @@
 name = "argusai"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
 
 # Development environment
 [env.development]
 name = "argusai-dev"
-vars = { 
-  ENVIRONMENT = "development",
-  GITHUB_APP_ID = "your-dev-app-id",
-  GITHUB_MODEL = "gpt-4o-mini",
-  LOG_LEVEL = "debug"
-}
+[env.development.vars]
+ENVIRONMENT = "development"
+GITHUB_APP_ID = "your-dev-app-id"
+GITHUB_MODEL = "gpt-4o-mini"
+LOG_LEVEL = "debug"
 
 # Production environment
 [env.production]
@@ -18,12 +18,11 @@ name = "argusai"
 routes = [
   { pattern = "api.argusai.dev/*", zone_name = "argusai.dev" }
 ]
-vars = { 
-  ENVIRONMENT = "production",
-  GITHUB_APP_ID = "your-prod-app-id",
-  GITHUB_MODEL = "gpt-4o",
-  LOG_LEVEL = "info"
-}
+[env.production.vars]
+ENVIRONMENT = "production"
+GITHUB_APP_ID = "your-prod-app-id"
+GITHUB_MODEL = "gpt-4o"
+LOG_LEVEL = "info"
 
 # KV Namespaces (create with: wrangler kv:namespace create "NAME")
 [[env.production.kv_namespaces]]

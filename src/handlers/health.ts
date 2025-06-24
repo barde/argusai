@@ -10,7 +10,7 @@ export async function healthHandler(c: Context<{ Bindings: Env }>) {
     checks: {
       kv: false,
       queue: false,
-    }
+    },
   };
 
   try {
@@ -24,7 +24,7 @@ export async function healthHandler(c: Context<{ Bindings: Env }>) {
   // Queue health is implicit - if we can receive the request, the worker is healthy
   checks.checks.queue = true;
 
-  const isHealthy = Object.values(checks.checks).every(v => v === true);
-  
+  const isHealthy = Object.values(checks.checks).every((v) => v === true);
+
   return c.json(checks, isHealthy ? 200 : 503);
 }

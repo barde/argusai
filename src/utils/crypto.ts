@@ -20,14 +20,10 @@ export async function validateWebhookSignature(
       ['sign']
     );
 
-    const signed = await crypto.subtle.sign(
-      'HMAC',
-      key,
-      encoder.encode(payload)
-    );
+    const signed = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
 
     const expectedSignature = 'sha256=' + arrayBufferToHex(signed);
-    
+
     // Constant-time comparison to prevent timing attacks
     return safeCompare(signature, expectedSignature);
   } catch (error) {
@@ -41,7 +37,7 @@ export async function validateWebhookSignature(
  */
 function arrayBufferToHex(buffer: ArrayBuffer): string {
   return Array.from(new Uint8Array(buffer))
-    .map(b => b.toString(16).padStart(2, '0'))
+    .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 }
 

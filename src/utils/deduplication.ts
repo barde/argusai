@@ -8,17 +8,17 @@ export async function isDuplicateEvent(
   eventId: string
 ): Promise<boolean> {
   const key = `dedup:${repository}:${prNumber}:${eventId}`;
-  
+
   try {
     const existing = await cache.get(key);
-    
+
     if (existing) {
       return true;
     }
 
     // Store the event ID with 24-hour TTL
     await cache.put(key, '1', {
-      expirationTtl: 86400 // 24 hours in seconds
+      expirationTtl: 86400, // 24 hours in seconds
     });
 
     return false;

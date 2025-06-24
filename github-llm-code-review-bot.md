@@ -146,41 +146,81 @@ export class ReviewWorker {
 - Handles streaming responses from LLM providers
 - Posts structured comments to GitHub
 
-#### 3. **Storage Layer (Workers KV & D1)**
-- **Workers KV**: 
-  - Global key-value storage
-  - Caches LLM responses (60s TTL)
-  - Stores rate limit counters
-  - Deduplication keys
-- **Workers D1**: 
-  - SQLite at the edge
-  - PR review history
-  - Audit logs
-  - Configuration overrides
+#### 3. **Lightweight Storage Strategy**
+- **Workers KV (Primary)**: 
+  - Review cache (1 hour TTL) - only actionable comments
+  - Rate limit counters (60s TTL)
+  - Deduplication keys (24 hour TTL)
+  - Active PR tracking
+- **No Persistent Logs**: 
+  - Audit logs streamed to stdout (captured by Logpush if needed)
+  - No long-term PR history storage
+  - Metrics aggregated in-memory and flushed periodically
+- **Minimal D1 Usage (Optional)**:
+  - Configuration overrides only
+  - No review history to keep data lightweight
 
 #### 4. **Queue System (Cloudflare Queues)**
+
+**Why Cloudflare Queues over alternatives:**
+- **Native Integration**: First-class support in Workers
+- **Zero Configuration**: No separate infrastructure
+- **At-least-once delivery**: Guaranteed message processing
+- **Automatic retries**: With exponential backoff
+- **Dead letter queues**: For handling persistent failures
+- **Cost effective**: 1M messages/month free
+
+**Alternatives considered:**
+- **Azure Service Bus**: Requires external connectivity, higher latency
+- **Apache Kafka**: Overkill for this use case, complex operations
+- **Redis Streams**: Need separate Redis instance, not edge-native
+- **AWS SQS**: Cross-cloud complexity, egress costs
+- **RabbitMQ**: Self-hosted overhead, not serverless
+
 ```typescript
 // Producer in webhook handler
 await env.REVIEW_QUEUE.send({
   prNumber: pr.number,
   repo: pr.repository.full_name,
-  action: pr.action
+  action: pr.action,
+  installationId: pr.installation.id,
+  timestamp: Date.now()
 });
 
-// Consumer in review worker
+// Consumer configuration in wrangler.toml
+[env.production.queues]
+producers = [{ binding = "REVIEW_QUEUE", queue = "argoai-reviews" }]
+consumers = [{
+  queue = "argoai-reviews",
+  max_batch_size = 10,
+  max_batch_timeout = 30,
+  max_retries = 3,
+  dead_letter_queue = "argoai-dlq"
+}]
+
+// Consumer implementation
 export default {
   async queue(batch: MessageBatch<ReviewTask>, env: Env): Promise<void> {
-    for (const message of batch.messages) {
-      await processReview(message.body);
-      message.ack();
-    }
+    // Process messages in parallel for efficiency
+    await Promise.all(
+      batch.messages.map(async (message) => {
+        try {
+          await processReview(message.body, env);
+          message.ack(); // Acknowledge successful processing
+        } catch (error) {
+          console.error(`Failed to process review: ${error}`);
+          message.retry(); // Retry with exponential backoff
+        }
+      })
+    );
   }
 }
 ```
-- Handles async processing
+- Native Cloudflare Queues integration
 - Automatic retries with exponential backoff
-- Dead letter queue for failed reviews
-- Batching for efficiency
+- Dead letter queue for persistent failures
+- Batch processing for efficiency (up to 10 messages)
+- At-least-once delivery guarantee
 
 ### Technology Stack - Cloudflare Workers Native
 
@@ -193,7 +233,7 @@ export default {
   - Workers KV (key-value cache)
   - Workers D1 (SQLite database)
   - R2 (object storage for logs)
-- **LLM Integration**: Native fetch with streaming
+- **LLM Integration**: GitHub Models API (free tier with GitHub token)
 
 #### Development & Deployment
 - **CLI**: Wrangler 3.x
@@ -203,265 +243,16 @@ export default {
 - **Monitoring**: Workers Analytics + Logpush
 - **Secrets**: Workers Secrets (encrypted env vars)
 
-## Hosting Analysis
+## Platform Choice: Cloudflare Workers
 
-### Azure Hosting Options
+We've chosen Cloudflare Workers as the primary platform for ArgoAI due to its:
+- **Zero cold starts** - Critical for GitHub webhook timeouts
+- **Global edge deployment** - Sub-50ms response times worldwide
+- **Native queuing** - Cloudflare Queues for async processing
+- **Cost efficiency** - Often fits within free tier ($0-50/month)
+- **Minimal ops overhead** - No servers to manage
 
-#### Option 1: Azure Container Instances (ACI)
-**Pros:**
-- Serverless containers without cluster management
-- Pay-per-second billing
-- Quick deployment
-- Built-in scaling
-- Direct integration with Azure services
-
-**Cons:**
-- Limited to single containers
-- No built-in load balancing
-- Higher cost for constant workloads
-
-**Cost Estimate:** ~$50-200/month for moderate usage
-
-**Best For:** Low to medium traffic, sporadic workloads
-
-#### Option 2: Azure App Service
-**Pros:**
-- Fully managed PaaS
-- Built-in autoscaling
-- Easy CI/CD integration
-- SSL certificates included
-- WebJobs for background tasks
-
-**Cons:**
-- Less flexibility than containers
-- Higher baseline cost
-- Limited customization
-
-**Cost Estimate:** ~$100-400/month
-
-**Best For:** Teams preferring managed solutions
-
-#### Option 3: Azure Kubernetes Service (AKS)
-**Pros:**
-- Full Kubernetes capabilities
-- Excellent scaling options
-- Multi-region support
-- Strong ecosystem
-- Azure integrations
-
-**Cons:**
-- Complexity overhead
-- Requires Kubernetes expertise
-- Higher operational burden
-
-**Cost Estimate:** ~$150-500/month + compute
-
-**Best For:** Large-scale deployments, multiple services
-
-#### Option 4: Azure Functions + Logic Apps
-**Pros:**
-- True serverless
-- Pay-per-execution
-- Built-in GitHub connector
-- Minimal maintenance
-
-**Cons:**
-- Cold starts
-- 10-minute execution limit
-- Less control over runtime
-
-**Cost Estimate:** ~$20-100/month
-
-**Best For:** Low-volume, simple implementations
-
-### Cloudflare Workers - Primary Architecture (Recommended)
-
-#### Why Cloudflare Workers for ArgoAI
-
-**Perfect Fit for Code Review Bot:**
-- **Webhook Processing**: Ideal for handling GitHub webhooks with guaranteed sub-50ms response times
-- **Global Distribution**: Reviews happen instantly regardless of developer location
-- **No Cold Starts**: Critical for webhook timeout requirements (10s)
-- **Cost Efficient**: Pay only for actual reviews, not idle time
-- **Scale to Zero**: No cost when no PRs are being reviewed
-
-#### Detailed Cloudflare Workers Architecture
-
-```typescript
-// wrangler.toml configuration
-name = "argoai"
-main = "src/index.ts"
-compatibility_date = "2024-01-01"
-
-[env.production]
-kv_namespaces = [
-  { binding = "CACHE", id = "xxx" },
-  { binding = "RATE_LIMITS", id = "yyy" }
-]
-d1_databases = [
-  { binding = "DB", database_name = "argoai-reviews", database_id = "zzz" }
-]
-queues = {
-  producers = [{ binding = "REVIEW_QUEUE", queue = "argoai-reviews" }],
-  consumers = [{ queue = "argoai-reviews" }]
-}
-
-[[env.production.routes]]
-pattern = "api.argoai.dev/*"
-
-[env.production.vars]
-GITHUB_APP_ID = "123456"
-LLM_PROVIDER = "openai"
-```
-
-#### Implementation Details
-
-**1. Webhook Entry Point (src/index.ts)**
-```typescript
-import { Hono } from 'hono'
-import { verifyWebhook } from './github'
-import { ReviewQueue } from './queue'
-
-const app = new Hono<{ Bindings: Env }>()
-
-app.post('/webhooks/github', async (c) => {
-  // Verify GitHub signature
-  const valid = await verifyWebhook(c.req, c.env.GITHUB_WEBHOOK_SECRET)
-  if (!valid) return c.text('Unauthorized', 401)
-  
-  // Parse webhook payload
-  const payload = await c.req.json()
-  
-  // Queue for async processing
-  await c.env.REVIEW_QUEUE.send({
-    type: 'review',
-    payload
-  })
-  
-  // Return immediately
-  return c.text('Accepted', 202)
-})
-
-export default app
-```
-
-**2. Queue Consumer (src/consumer.ts)**
-```typescript
-export default {
-  async queue(batch: MessageBatch, env: Env): Promise<void> {
-    for (const message of batch.messages) {
-      try {
-        await processReview(message.body, env)
-        message.ack()
-      } catch (error) {
-        message.retry()
-      }
-    }
-  }
-}
-```
-
-**3. Storage Strategy**
-- **Workers KV**: 
-  - LLM response cache (1 hour TTL)
-  - Rate limit counters
-  - Webhook deduplication
-- **Workers D1**:
-  - Review history
-  - User preferences
-  - Audit logs
-  - Analytics data
-- **R2 Storage**:
-  - Large PR diffs
-  - Historical data
-  - Backup storage
-
-**Cost Breakdown for Cloudflare Workers:**
-- **Workers**: $0.15/million requests after 10M free
-- **Workers KV**: $0.50/million reads after 10M free
-- **D1 Database**: 5GB free, then $0.75/GB
-- **Queues**: 1M messages free/month
-- **Estimated Monthly**: $0-50 for most teams
-
-**Performance Characteristics:**
-- **Webhook Response**: <50ms globally
-- **Review Processing**: 2-5 seconds (LLM dependent)
-- **Comment Posting**: <200ms
-- **Cache Hit Rate**: >80% for similar code patterns
-
-### Other Notable Options
-
-#### AWS Lambda + API Gateway
-**Pros:**
-- Mature serverless platform
-- Extensive AWS ecosystem
-- Fine-grained scaling
-- Strong monitoring
-
-**Cons:**
-- Cold starts
-- Complex pricing
-- Vendor lock-in
-
-**Cost Estimate:** $30-150/month
-
-#### Google Cloud Run
-**Pros:**
-- Fully managed containers
-- Excellent scaling
-- Knative-based
-- Good free tier
-
-**Cons:**
-- GCP ecosystem lock-in
-- Less GitHub integration
-
-**Cost Estimate:** $20-100/month
-
-#### Vercel Edge Functions
-**Pros:**
-- Excellent DX
-- Fast deployments
-- Edge runtime
-- Good GitHub integration
-
-**Cons:**
-- Limited backend features
-- Primarily frontend-focused
-
-**Cost Estimate:** $20-100/month
-
-### Recommendation Matrix
-
-| Criteria | Azure Container Instances | Azure Functions | Cloudflare Workers | AWS Lambda |
-|----------|--------------------------|-----------------|-------------------|------------|
-| Setup Complexity | Medium | Low | Low | Medium |
-| Scalability | Good | Excellent | Excellent | Excellent |
-| Performance | Good | Good (cold starts) | Excellent | Good (cold starts) |
-| Cost Efficiency | Medium | High | Very High | High |
-| Feature Completeness | Excellent | Good | Limited | Good |
-| Developer Experience | Good | Good | Excellent | Good |
-| Enterprise Features | Excellent | Excellent | Limited | Excellent |
-
-### Recommended Architecture by Scale
-
-#### Small Teams (< 100 PRs/day)
-**Primary:** Cloudflare Workers + KV
-**Fallback:** Azure Functions
-**Queue:** Cloudflare Queues
-**Cache:** Workers KV
-
-#### Medium Teams (100-1000 PRs/day)
-**Primary:** Azure Container Instances
-**Alternative:** AWS Lambda + SQS
-**Queue:** Azure Service Bus
-**Cache:** Azure Cache for Redis
-
-#### Large Teams (> 1000 PRs/day)
-**Primary:** Azure Kubernetes Service
-**Alternative:** AWS ECS/EKS
-**Queue:** Azure Service Bus
-**Cache:** Redis Cluster
+For alternative hosting options and detailed comparisons, see [hosting-alternatives.md](./hosting-alternatives.md).
 
 ## Environment Configuration - Cloudflare Workers
 
@@ -487,10 +278,10 @@ kv_namespaces = [
   { binding = "CONFIG", id = "your-config-kv-id" }
 ]
 
-# D1 Database
-d1_databases = [
-  { binding = "DB", database_name = "argoai-reviews", database_id = "your-d1-id" }
-]
+# D1 Database (optional - only for config storage)
+# d1_databases = [
+#   { binding = "DB", database_name = "argoai-config", database_id = "your-d1-id" }
+# ]
 
 # Queues
 [env.production.queues]
@@ -501,10 +292,10 @@ consumers = [
   { queue = "argoai-reviews", max_batch_size = 10, max_batch_timeout = 30 }
 ]
 
-# R2 Buckets
-r2_buckets = [
-  { binding = "LOGS", bucket_name = "argoai-logs" }
-]
+# R2 Buckets (optional - use Logpush instead for logs)
+# r2_buckets = [
+#   { binding = "LOGS", bucket_name = "argoai-logs" }
+# ]
 
 # Service Bindings (for multi-worker architecture)
 services = [
@@ -514,10 +305,10 @@ services = [
 # Environment Variables (non-secret)
 [env.production.vars]
 GITHUB_APP_ID = "123456"
-LLM_PROVIDER = "openai"
-LLM_MODEL = "gpt-4-turbo-preview"
+GITHUB_MODEL = "gpt-4o-mini"  # Free tier model from GitHub Models
 REVIEW_ENABLED_EVENTS = "pull_request.opened,pull_request.synchronize"
 LOG_LEVEL = "info"
+MAX_FILES_PER_REVIEW = "20"  # Limit to keep reviews focused
 ```
 
 #### Secrets Configuration (via wrangler secret)
@@ -525,8 +316,7 @@ LOG_LEVEL = "info"
 # Set secrets securely (not in wrangler.toml)
 wrangler secret put GITHUB_APP_PRIVATE_KEY --env production
 wrangler secret put GITHUB_WEBHOOK_SECRET --env production
-wrangler secret put OPENAI_API_KEY --env production
-wrangler secret put ANTHROPIC_API_KEY --env production
+wrangler secret put GITHUB_TOKEN --env production  # For GitHub Models API
 
 # Optional secrets for advanced features
 wrangler secret put SLACK_WEBHOOK_URL --env production
@@ -539,30 +329,25 @@ export interface Env {
   // Secrets
   GITHUB_APP_PRIVATE_KEY: string
   GITHUB_WEBHOOK_SECRET: string
-  OPENAI_API_KEY: string
-  ANTHROPIC_API_KEY: string
+  GITHUB_TOKEN: string  // For GitHub Models API access
   
   // KV Namespaces
   CACHE: KVNamespace
   RATE_LIMITS: KVNamespace
   CONFIG: KVNamespace
   
-  // D1 Database
-  DB: D1Database
+  // D1 Database (optional - for config only)
+  DB?: D1Database
   
   // Queues
   REVIEW_QUEUE: Queue
   
-  // R2 Buckets
-  LOGS: R2Bucket
-  
-  // Service Bindings
-  ANALYTICS: Fetcher
+  // Service Bindings (optional)
+  ANALYTICS?: Fetcher
   
   // Environment Variables
   GITHUB_APP_ID: string
-  LLM_PROVIDER: 'openai' | 'anthropic'
-  LLM_MODEL: string
+  GITHUB_MODEL: string  // e.g., 'gpt-4o-mini', 'Phi-3-small-8k-instruct'
   REVIEW_ENABLED_EVENTS: string
   LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error'
 }
@@ -593,8 +378,7 @@ const config = await env.CONFIG.get('review:rules', 'json')
 # Create .dev.vars file (gitignored)
 GITHUB_APP_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----...
 GITHUB_WEBHOOK_SECRET=dev-webhook-secret
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
+GITHUB_TOKEN=ghp_... # Your GitHub personal access token with models:read scope
 ```
 
 #### Local Testing with Miniflare
@@ -657,7 +441,7 @@ export async function handlePullRequestEvent(
 }
 ```
 
-### 2. LLM Integration with Streaming
+### 2. LLM Integration with GitHub Models
 
 ```typescript
 // src/llm/reviewer.ts
@@ -676,30 +460,40 @@ export class CodeReviewer {
     // Build prompt
     const prompt = this.buildReviewPrompt(diff, pr)
     
-    // Call LLM with streaming
-    const review = await this.callLLM(prompt)
+    // Call GitHub Models API
+    const review = await this.callGitHubModels(prompt)
     
-    // Cache result
-    await this.env.CACHE.put(cacheKey, JSON.stringify(review), {
+    // Cache result (lightweight - only actionable feedback)
+    await this.env.CACHE.put(cacheKey, JSON.stringify({
+      summary: review.summary,
+      comments: review.comments.filter(c => c.severity !== 'info')
+    }), {
       expirationTtl: 3600 // 1 hour
     })
     
     return review
   }
   
-  private async callLLM(prompt: string): Promise<ReviewResult> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  private async callGitHubModels(prompt: string): Promise<ReviewResult> {
+    // GitHub Models endpoint - uses GitHub token for auth
+    const response = await fetch('https://models.inference.ai.azure.com/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
+        'Authorization': `Bearer ${this.env.GITHUB_TOKEN}`,
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28'
       },
       body: JSON.stringify({
-        model: this.env.LLM_MODEL,
+        model: this.env.GITHUB_MODEL || 'gpt-4o-mini', // Free tier model
         messages: [
           {
             role: 'system',
-            content: 'You are an expert code reviewer...'
+            content: `You are ArgoAI, an expert code reviewer. Focus on:
+              - Security vulnerabilities
+              - Performance issues
+              - Code quality and best practices
+              - Potential bugs
+              Be concise and actionable. Skip style issues unless severe.`
           },
           {
             role: 'user',
@@ -708,9 +502,17 @@ export class CodeReviewer {
         ],
         stream: true,
         temperature: 0.3,
-        max_tokens: 4000
+        max_tokens: 2000 // Optimize token usage
       })
     })
+    
+    if (!response.ok) {
+      // Fallback to simpler model if rate limited
+      if (response.status === 429) {
+        return this.callGitHubModelsSimple(prompt)
+      }
+      throw new Error(`GitHub Models API error: ${response.status}`)
+    }
     
     // Process streaming response
     const reader = response.body?.getReader()
@@ -726,6 +528,29 @@ export class CodeReviewer {
     }
     
     return this.parseReviewResponse(fullResponse)
+  }
+  
+  private async callGitHubModelsSimple(prompt: string): Promise<ReviewResult> {
+    // Fallback to non-streaming for rate limit handling
+    const response = await fetch('https://models.inference.ai.azure.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.env.GITHUB_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'Phi-3-small-8k-instruct', // Lighter model
+        messages: [{
+          role: 'user',
+          content: `Review this code change briefly: ${prompt.substring(0, 1000)}`
+        }],
+        stream: false,
+        max_tokens: 500
+      })
+    })
+    
+    const data = await response.json()
+    return this.parseSimpleResponse(data.choices[0].message.content)
   }
 }
 ```
@@ -814,84 +639,102 @@ export async function rateLimitMiddleware(
 }
 ```
 
-### 5. D1 Database Schema
-
-```sql
--- migrations/001_initial.sql
-CREATE TABLE reviews (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  pr_number INTEGER NOT NULL,
-  repo_name TEXT NOT NULL,
-  sha TEXT NOT NULL,
-  review_status TEXT NOT NULL,
-  comments_count INTEGER DEFAULT 0,
-  severity_high INTEGER DEFAULT 0,
-  severity_medium INTEGER DEFAULT 0,
-  severity_low INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  completed_at TIMESTAMP,
-  error_message TEXT,
-  INDEX idx_repo_pr (repo_name, pr_number),
-  INDEX idx_created (created_at)
-);
-
-CREATE TABLE review_metrics (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  repo_name TEXT NOT NULL,
-  date DATE NOT NULL,
-  total_reviews INTEGER DEFAULT 0,
-  avg_review_time_ms INTEGER,
-  cache_hit_rate REAL,
-  error_rate REAL,
-  UNIQUE(repo_name, date)
-);
-```
-
-### 6. Monitoring and Analytics
+### 5. Minimal Storage Configuration
 
 ```typescript
-// src/analytics/tracker.ts
-export class AnalyticsTracker {
+// src/storage/config.ts
+// D1 is optional - only use if you need persistent config overrides
+// Most configuration should come from KV or environment variables
+
+export class ConfigStore {
   constructor(private env: Env) {}
   
-  async trackReview(
-    pr: PullRequestData,
-    duration: number,
-    cacheHit: boolean
-  ): Promise<void> {
-    // Send to analytics worker via service binding
-    await this.env.ANALYTICS.fetch('https://analytics/track', {
-      method: 'POST',
-      body: JSON.stringify({
-        event: 'review_completed',
-        properties: {
-          repo: pr.repo,
-          duration_ms: duration,
-          cache_hit: cacheHit,
-          timestamp: Date.now()
-        }
-      })
-    })
+  async getRepoConfig(repo: string): Promise<RepoConfig | null> {
+    // First check KV for quick access
+    const cached = await this.env.CONFIG.get(`repo:${repo}`, 'json')
+    if (cached) return cached as RepoConfig
     
-    // Update D1 metrics
-    await this.updateMetrics(pr.repo, duration, cacheHit)
+    // Optionally check D1 if configured
+    if (this.env.DB) {
+      const result = await this.env.DB.prepare(
+        'SELECT config FROM repo_configs WHERE repo_name = ?'
+      ).bind(repo).first()
+      
+      if (result) {
+        const config = JSON.parse(result.config as string)
+        // Cache in KV for next time
+        await this.env.CONFIG.put(`repo:${repo}`, JSON.stringify(config), {
+          expirationTtl: 3600
+        })
+        return config
+      }
+    }
+    
+    return null
+  }
+}
+
+// Lightweight metrics - no persistent storage
+export class MetricsCollector {
+  private metrics = new Map<string, number>()
+  
+  increment(key: string): void {
+    this.metrics.set(key, (this.metrics.get(key) || 0) + 1)
   }
   
-  private async updateMetrics(
-    repo: string,
-    duration: number,
-    cacheHit: boolean
-  ): Promise<void> {
-    const date = new Date().toISOString().split('T')[0]
-    
-    await this.env.DB.prepare(`
-      INSERT INTO review_metrics (repo_name, date, total_reviews, avg_review_time_ms)
-      VALUES (?, ?, 1, ?)
-      ON CONFLICT(repo_name, date) DO UPDATE SET
-        total_reviews = total_reviews + 1,
-        avg_review_time_ms = (avg_review_time_ms * total_reviews + ?) / (total_reviews + 1)
-    `).bind(repo, date, duration, duration).run()
+  async flush(env: Env): Promise<void> {
+    // Log metrics to stdout for Logpush collection
+    console.log(JSON.stringify({
+      type: 'metrics',
+      timestamp: Date.now(),
+      data: Object.fromEntries(this.metrics)
+    }))
+    this.metrics.clear()
   }
+}
+```
+
+### 6. Lightweight Monitoring
+
+```typescript
+// src/monitoring/logger.ts
+export class Logger {
+  constructor(private env: Env) {}
+  
+  logReview(pr: PullRequestData, result: ReviewResult, duration: number): void {
+    // Structured logging for Cloudflare Logpush
+    console.log(JSON.stringify({
+      type: 'review',
+      timestamp: Date.now(),
+      repo: pr.repo,
+      pr_number: pr.prNumber,
+      duration_ms: duration,
+      comments_count: result.comments.length,
+      cache_hit: result.fromCache || false,
+      model: this.env.GITHUB_MODEL,
+      // No PII - just metrics
+    }))
+  }
+  
+  logError(error: Error, context: any): void {
+    console.error(JSON.stringify({
+      type: 'error',
+      timestamp: Date.now(),
+      error: error.message,
+      stack: error.stack,
+      context
+    }))
+  }
+}
+
+// Use Cloudflare Analytics for aggregated metrics
+export function setupAnalytics(env: Env): void {
+  // Cloudflare Workers Analytics automatically tracks:
+  // - Request count
+  // - Error rates
+  // - CPU time
+  // - Response times
+  // No additional setup needed!
 }
 ```
 
@@ -986,16 +829,13 @@ wrangler kv:namespace create "CACHE"
 wrangler kv:namespace create "RATE_LIMITS"
 wrangler kv:namespace create "CONFIG"
 
-# 5. Create D1 database
-wrangler d1 create argoai-reviews
+# 5. Create Queue
+wrangler queues create argoai-reviews
 
-# 6. Create R2 bucket
-wrangler r2 bucket create argoai-logs
-
-# 7. Set secrets
+# 6. Set secrets
 wrangler secret put GITHUB_APP_PRIVATE_KEY
 wrangler secret put GITHUB_WEBHOOK_SECRET
-wrangler secret put OPENAI_API_KEY
+wrangler secret put GITHUB_TOKEN  # GitHub PAT with models:read scope
 
 # 8. Deploy to production
 wrangler deploy --env production
@@ -1027,28 +867,21 @@ wrangler deploy --env production
 - Queue depths
 - Worker CPU time
 
-### Custom Analytics Queries (D1)
-```sql
--- Daily review metrics
-SELECT 
-  date,
-  SUM(total_reviews) as reviews,
-  AVG(avg_review_time_ms) as avg_time_ms,
-  AVG(cache_hit_rate) as cache_hit_rate
-FROM review_metrics
-WHERE date >= date('now', '-7 days')
-GROUP BY date;
+### Cloudflare Analytics & Logpush
+- Use Cloudflare Dashboard for real-time metrics
+- Configure Logpush to send logs to your preferred destination:
+  - Amazon S3
+  - Google Cloud Storage
+  - Datadog
+  - Splunk
+  - Or any HTTP endpoint
 
--- Most active repositories
-SELECT 
-  repo_name,
-  COUNT(*) as review_count,
-  AVG(comments_count) as avg_comments
-FROM reviews
-WHERE created_at >= datetime('now', '-30 days')
-GROUP BY repo_name
-ORDER BY review_count DESC
-LIMIT 10;
+```bash
+# Example: Configure Logpush to S3
+wrangler logpush create \
+  --dataset workers_trace_events \
+  --destination "s3://your-bucket/argoai-logs" \
+  --fields "timestamp,outcome,scriptName,logs"
 ```
 
 ## Cost Analysis - Cloudflare Workers
@@ -1056,34 +889,81 @@ LIMIT 10;
 ### Free Tier Coverage (Most Teams)
 - **Workers**: 100,000 requests/day free
 - **Workers KV**: 100,000 reads/day free
-- **D1**: 5GB storage free
-- **R2**: 10GB storage free
 - **Queues**: 1M messages/month free
+- **GitHub Models**: Free tier with GitHub token (rate limited)
+- **No storage costs**: Minimal KV usage only
 
 ### Paid Tier Estimation
 For a team with ~1000 PRs/day:
 - **Workers**: ~3M requests/month = $0.45
-- **KV Operations**: ~5M reads/month = $2.50
-- **D1 Storage**: <5GB = $0
+- **KV Operations**: ~2M reads/month = $1.00
 - **Queue Messages**: ~30k/month = $0
-- **Total**: <$5/month
+- **GitHub Models**: $0 (using free tier)
+- **Total**: <$2/month
+
+### Cost Optimization Tips
+- GitHub Models free tier handles most workloads
+- Cache reviews aggressively to reduce API calls
+- Use lightweight models (Phi-3) for simple reviews
+- Batch queue processing to reduce invocations
 
 ### Cost Comparison
-- **Cloudflare Workers**: $0-50/month
-- **AWS Lambda**: $50-200/month
-- **Azure Functions**: $75-250/month
-- **Kubernetes**: $200-1000/month
+- **ArgoAI (Cloudflare + GitHub Models)**: $0-2/month
+- **Traditional LLM Integration**: $50-500/month
+- **AWS Lambda + OpenAI**: $100-300/month
+- **Kubernetes + Self-hosted**: $500-2000/month
 
 ## Conclusion
 
-ArgoAI leverages Cloudflare Workers' global edge network to deliver instant, intelligent code reviews at a fraction of the cost of traditional architectures. The edge-first design ensures:
+ArgoAI represents a paradigm shift in code review automation by combining:
 
-1. **Sub-second webhook processing** - Critical for GitHub's 10-second timeout
-2. **Global performance** - Reviews are fast for developers worldwide
-3. **Infinite scalability** - From 10 to 10,000 PRs/day without changes
-4. **Minimal operational overhead** - No servers, containers, or clusters to manage
-5. **Cost efficiency** - Pay only for actual usage, often within free tier
+1. **GitHub Models Integration** - Free tier LLM access with your GitHub token
+2. **Edge-First Architecture** - Cloudflare Workers for zero cold starts
+3. **Lightweight Storage** - No unnecessary data retention, just actionable insights
+4. **Native Queuing** - Cloudflare Queues for reliable async processing
+5. **Minimal Costs** - Often completely free, max $2/month for most teams
 
-The architecture is designed to start simple and grow with your needs, from a single repository to an entire organization. With Cloudflare Workers, ArgoAI can provide enterprise-grade code review automation that's accessible to teams of any size.
+### Key Innovations
 
-Begin by registering the "ArgoAI" GitHub App name today, and have intelligent code reviews running within hours, not weeks.
+- **No API Keys Required**: Uses GitHub token for both API and Models access
+- **Privacy First**: No persistent storage of code or reviews
+- **Global Performance**: Sub-50ms webhook responses worldwide
+- **Zero Ops**: No infrastructure to manage or scale
+
+### Getting Started in 15 Minutes
+
+1. **Register "ArgoAI" GitHub App** (5 min)
+   - Go to Settings → Developer settings → GitHub Apps → New
+   - Name: ArgoAI
+   - Webhook URL: `https://api.argoai.dev/webhooks/github` (update later)
+   - Permissions: Pull requests (Read & Write), Issues (Write), Contents (Read)
+
+2. **Create GitHub Token for Models** (1 min)
+   - Go to Settings → Developer settings → Personal access tokens → Fine-grained tokens
+   - Name: ArgoAI Models Access
+   - Expiration: 90 days (or custom)
+   - Permissions: Only `models:read` required
+   - Copy the token (starts with `github_pat_`)
+
+3. **Deploy to Cloudflare Workers** (5 min)
+   ```bash
+   git clone https://github.com/yourusername/argoai.git
+   cd argoai
+   npm install
+   wrangler login
+   wrangler secret put GITHUB_TOKEN
+   wrangler deploy --env production
+   ```
+
+4. **Configure Webhook URL** (2 min)
+   - Return to GitHub App settings
+   - Update webhook URL to your Workers URL
+   - Save changes
+
+5. **Start reviewing PRs!** (∞)
+   - Install the app on your repositories
+   - Open a PR and watch ArgoAI review it instantly
+
+The combination of GitHub Models and Cloudflare Workers makes enterprise-grade code review automation accessible to everyone - from indie developers to large organizations. No more choosing between quality and cost.
+
+**Start today** - Your code deserves intelligent, instant reviews without the infrastructure overhead.

@@ -268,17 +268,18 @@ export default {
 - Batch processing for efficiency (up to 10 messages)
 - At-least-once delivery guarantee
 
-### Technology Stack - Cloudflare Workers SDK
+### Technology Stack - Cloudflare Workers SDK (2025)
 
-Following the principles from [Cloudflare Workers SDK](https://github.com/cloudflare/workers-sdk):
+Following the principles from [Cloudflare Workers SDK](https://github.com/cloudflare/workers-sdk) with 2025 enhancements:
 
 #### Core Platform
-- **Runtime**: Cloudflare Workers (V8 Isolates)
-- **Language**: TypeScript (96%+ of Workers SDK codebase)
-- **API Framework**: Hono (lightweight, Workers-optimized)
-- **Queue**: Cloudflare Queues (native integration)
+- **Runtime**: Cloudflare Workers (V8 Isolates) + Container support (June 2025)[^30]
+- **Languages**: TypeScript + Python (native support as of 2025)[^29]
+- **API Framework**: Hono (lightweight) or FastAPI (Python)[^29]
+- **Queue**: Cloudflare Queues (native integration, enhanced in 2025)
 - **Storage**: Workers KV only (no D1 - staying edge-native)
-- **LLM Integration**: GitHub Models API (free tier)
+- **LLM Integration**: GitHub Models API + Workers AI (300 req/min)[^28]
+- **AI Features**: Cloudy AI agent for configuration optimization[^31]
 
 #### Development Best Practices (Workers SDK)
 - **Project Creation**: `npm create cloudflare@latest`
@@ -781,9 +782,9 @@ export function setupAnalytics(env: Env): void {
 }
 ```
 
-## Modern Async LLM Processing Patterns (2024)
+## Modern Async LLM Processing Patterns (2024-2025)
 
-Based on industry best practices and recent developments in async LLM API architectures[^1][^2][^3], ArgusAI implements the following patterns:
+Based on industry best practices and recent developments in async LLM API architectures[^1][^2][^3], along with 2025 advancements in event-driven AI[^25][^26], ArgusAI implements the following patterns:
 
 ### 1. **Asynchronous Request-Reply Pattern**
 
@@ -857,13 +858,25 @@ Following Helicone's observability patterns[^12]:
 3. **File Storage**: For large PRs, store diffs in R2 instead of queuing full content[^14]
 4. **Priority Queues**: Route simple changes to lighter models[^15]
 
-### 6. **Cloudflare-Specific Optimizations**
+### 6. **Cloudflare-Specific Optimizations (2025 Updates)**
 
-Leveraging Cloudflare's 2024 AI improvements[^16]:
+Leveraging Cloudflare's latest AI improvements[^16][^27]:
 
-- **Workers AI Integration**: Option to use Cloudflare's hosted models for lower latency
-- **Streaming Responses**: Process LLM output as it arrives
-- **Global Distribution**: Process reviews at the edge closest to the GitHub datacenter
+- **Workers AI GA**: Now generally available with 300 requests/minute for most LLMs (up from 50)[^28]
+- **Python Support**: Native Python support in Workers enables use of LangChain and FastAPI[^29]
+- **Container Support (June 2025)**: Run LLM-generated code in secure sandboxes[^30]
+- **Cloudy AI Agent**: Leverage Cloudflare's AI agent for optimizing configurations[^31]
+- **KV Cache Compression**: Open-source techniques for faster LLM inference[^32]
+- **Global GPU Network**: GPUs in 190+ cities for ultra-low latency inference
+
+### 7. **Event-Driven Architecture Best Practices (2025)**
+
+Following the latest event-driven patterns for LLM workloads[^33]:
+
+1. **Event Callbacks over Polling**: Use webhook callbacks instead of polling for LLM responses[^34]
+2. **Graceful Degradation**: Implement shuffle sharding to isolate noisy customers[^35]
+3. **Error Handling Pipeline**: Separate error-handler processors for resilient processing
+4. **Message Streaming**: Leverage Workflow Context for real-time message pipelines[^36]
 
 ## Implementation Best Practices
 
@@ -1144,3 +1157,27 @@ The combination of GitHub Models and Cloudflare Workers makes enterprise-grade c
 [^23]: Hookdeck (2024). "Webhook Infrastructure Guide". https://hookdeck.com/webhooks/guides/why-implement-asynchronous-processing-webhooks
 
 [^24]: LiteLLM Docs (2024). "Alerting / Webhooks". https://docs.litellm.ai/docs/proxy/alerting
+
+[^25]: Hookdeck (2025). "Asynchronous AI: Why Event Callbacks Are the Future of GenAI APIs". https://hookdeck.com/blog/asynchronous-ai
+
+[^26]: SkillWisor (2025). "Building Effective LLM-Based AI Agents: Patterns and Best Practices". https://skillwisor.com/2025/05/07/building-effective-llm-based-ai-agents-patterns-and-best-practices/
+
+[^27]: Cloudflare Blog (2025). "Developer Week 2025 wrap-up". https://blog.cloudflare.com/developer-week-2025-wrap-up/
+
+[^28]: Cloudflare Blog (2025). "Leveling up Workers AI: general availability and more new capabilities". https://blog.cloudflare.com/workers-ai-ga-huggingface-loras-python-support/
+
+[^29]: Cloudflare Blog (2025). "Python Support for Workers". https://blog.cloudflare.com/python-workers
+
+[^30]: Cloudflare Blog (2025). "Simple, scalable, and global: Containers are coming to Cloudflare Workers in June 2025". https://blog.cloudflare.com/cloudflare-containers-coming-2025/
+
+[^31]: Cloudflare Blog (2025). "Introducing Cloudy, Cloudflare's AI agent for simplifying complex configurations". https://blog.cloudflare.com/introducing-ai-agent/
+
+[^32]: Cloudflare Blog (2025). "Making Workers AI faster and more efficient: Performance optimization with KV cache compression". https://blog.cloudflare.com/making-workers-ai-faster/
+
+[^33]: Data Leads Future (2025). "Deep Dive into LlamaIndex Workflow: Event-driven LLM architecture". https://www.dataleadsfuture.com/deep-diving-into-llamaindex-workflow-event-driven-llm-architecture/
+
+[^34]: Solace (2025). "New Standalone LLM Agent Paves the Way for Event-Driven AI". https://solace.com/blog/new-standalone-llm-agent-paves-the-way-for-event-driven-ai/
+
+[^35]: InfoQ (2025). "Designing Resilient Event-Driven Systems at Scale". https://www.infoq.com/articles/scalable-resilient-event-systems/
+
+[^36]: Towards Data Science (2025). "Deep Dive into LlamaIndex Workflow: Event-Driven LLM Architecture". https://towardsdatascience.com/deep-dive-into-llamaindex-workflow-event-driven-llm-architecture-8011f41f851a/

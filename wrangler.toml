@@ -1,0 +1,107 @@
+name = "argusai"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# Development environment
+[env.development]
+name = "argusai-dev"
+vars = { 
+  ENVIRONMENT = "development",
+  GITHUB_APP_ID = "your-dev-app-id",
+  GITHUB_MODEL = "gpt-4o-mini",
+  LOG_LEVEL = "debug"
+}
+
+# Production environment
+[env.production]
+name = "argusai"
+routes = [
+  { pattern = "api.argusai.dev/*", zone_name = "argusai.dev" }
+]
+vars = { 
+  ENVIRONMENT = "production",
+  GITHUB_APP_ID = "your-prod-app-id",
+  GITHUB_MODEL = "gpt-4o",
+  LOG_LEVEL = "info"
+}
+
+# KV Namespaces (create with: wrangler kv:namespace create "NAME")
+[[env.production.kv_namespaces]]
+binding = "CACHE"
+id = "your-cache-namespace-id"
+
+[[env.production.kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "your-rate-limits-namespace-id"
+
+[[env.production.kv_namespaces]]
+binding = "CONFIG"
+id = "your-config-namespace-id"
+
+[[env.development.kv_namespaces]]
+binding = "CACHE"
+id = "your-dev-cache-namespace-id"
+
+[[env.development.kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "your-dev-rate-limits-namespace-id"
+
+[[env.development.kv_namespaces]]
+binding = "CONFIG"
+id = "your-dev-config-namespace-id"
+
+# Queue Configuration
+[[env.production.queues.producers]]
+binding = "REVIEW_QUEUE"
+queue = "argusai-reviews"
+
+[[env.production.queues.consumers]]
+queue = "argusai-reviews"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "argusai-reviews-dlq"
+
+[[env.development.queues.producers]]
+binding = "REVIEW_QUEUE"
+queue = "argusai-reviews-dev"
+
+[[env.development.queues.consumers]]
+queue = "argusai-reviews-dev"
+max_batch_size = 5
+max_batch_timeout = 30
+max_retries = 2
+
+# R2 bucket for storing large diffs (optional)
+# [[r2_buckets]]
+# binding = "DIFF_STORAGE"
+# bucket_name = "argusai-diffs"
+
+# Service bindings (if using separate workers)
+# [[services]]
+# binding = "AUTH_SERVICE"
+# service = "argusai-auth"
+# environment = "production"
+
+# Durable Objects (for advanced rate limiting)
+# [[durable_objects.bindings]]
+# name = "RATE_LIMITER"
+# class_name = "RateLimiter"
+# script_name = "argusai"
+
+# Secrets (set with: wrangler secret put SECRET_NAME)
+# Required secrets:
+# - GITHUB_APP_PRIVATE_KEY: GitHub App private key for authentication
+# - GITHUB_WEBHOOK_SECRET: Secret for validating webhook signatures
+# - GITHUB_TOKEN: GitHub PAT with models:read permission
+# Optional secrets:
+# - SENTRY_DSN: For error tracking
+# - SLACK_WEBHOOK_URL: For notifications
+
+# Performance settings
+[env.production.performance]
+cpu_ms = 50  # Limit CPU time per request
+
+# Logpush (optional)
+# [env.production.logpush]
+# enabled = true

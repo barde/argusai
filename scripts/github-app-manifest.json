@@ -1,0 +1,23 @@
+{
+  "name": "ArgusAI",
+  "description": "Intelligent code review bot powered by LLMs, running on Cloudflare Workers edge network",
+  "url": "https://argusai.dev",
+  "hook_attributes": {
+    "url": "https://api.argusai.dev/webhooks/github"
+  },
+  "redirect_url": "https://argusai.dev/setup/callback",
+  "setup_url": "https://argusai.dev/setup",
+  "setup_on_update": true,
+  "public": false,
+  "default_permissions": {
+    "pull_requests": "write",
+    "issues": "write",
+    "contents": "read",
+    "metadata": "read"
+  },
+  "default_events": [
+    "pull_request",
+    "pull_request_review",
+    "pull_request_review_comment"
+  ]
+}

@@ -27,27 +27,27 @@ LOG_LEVEL = "info"
 # KV Namespaces (create with: wrangler kv:namespace create "NAME")
 [[env.production.kv_namespaces]]
 binding = "CACHE"
-id = "your-cache-namespace-id"
+id = "df70afec18184e6da7a50bad00cbae45"
 
 [[env.production.kv_namespaces]]
 binding = "RATE_LIMITS"
-id = "your-rate-limits-namespace-id"
+id = "3f9fae87dddd4751823a13ce49dfa81c"
 
 [[env.production.kv_namespaces]]
 binding = "CONFIG"
-id = "your-config-namespace-id"
+id = "6155db907791462998569c559e71a8cd"
 
 [[env.development.kv_namespaces]]
 binding = "CACHE"
-id = "your-dev-cache-namespace-id"
+id = "13021ce160594c9bb2582e976da7a2cc"
 
 [[env.development.kv_namespaces]]
 binding = "RATE_LIMITS"
-id = "your-dev-rate-limits-namespace-id"
+id = "06264102637f40a6a366b0cf6b45b2d5"
 
 [[env.development.kv_namespaces]]
 binding = "CONFIG"
-id = "your-dev-config-namespace-id"
+id = "f28a375dc99b45c8905e0d7016544a13"
 
 # Queue Configuration
 [[env.production.queues.producers]]

@@ -1,0 +1,19 @@
+{
+  "name": "argusai-infrastructure",
+  "version": "1.0.0",
+  "description": "ArgusAI infrastructure as code using Pulumi",
+  "main": "index.ts",
+  "scripts": {
+    "deploy": "pulumi up",
+    "preview": "pulumi preview",
+    "destroy": "pulumi destroy"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@pulumi/cloudflare": "^5.0.0",
+    "@pulumi/pulumi": "^3.0.0"
+  }
+}

@@ -1,0 +1,3 @@
+name: argusai
+runtime: nodejs
+description: ArgusAI - GitHub code review bot on Cloudflare Workers

@@ -1,0 +1,14 @@
+# Cloudflare Configuration
+# account_id = "1fe86871c437398bd78c9f5b73c6ecdb"  # Already set as default in main.tf
+# zone_id    = "your-zone-id"  # Only needed if using custom domain
+
+# Environment
+environment = "development"  # or "production"
+
+# GitHub App Configuration
+github_app_id = "your-github-app-id"
+
+# Secrets (can also be set via environment variables)
+# github_app_private_key = "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+# github_webhook_secret = "your-webhook-secret"
+# github_token = "ghp_your_github_token_with_models_read"

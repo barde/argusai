@@ -1,6 +1,6 @@
-# Hosting Alternatives for ArgoAI Code Review Bot
+# Hosting Alternatives for ArgusAI Code Review Bot
 
-This document explores various hosting options that were considered for the ArgoAI GitHub code review bot. While we ultimately chose Cloudflare Workers for its edge-first architecture and cost efficiency, these alternatives may be valuable for teams with different requirements or existing infrastructure investments.
+This document explores various hosting options that were considered for the ArgusAI GitHub code review bot. While we ultimately chose Cloudflare Workers for its edge-first architecture and cost efficiency, these alternatives may be valuable for teams with different requirements or existing infrastructure investments.
 
 ## Azure Hosting Options
 
@@ -246,7 +246,7 @@ When choosing a platform, consider:
 
 ## Why We Chose Cloudflare Workers
 
-After evaluating all options, Cloudflare Workers emerged as the optimal choice for ArgoAI because:
+After evaluating all options, Cloudflare Workers emerged as the optimal choice for ArgusAI because:
 
 1. **Zero Cold Starts**: Critical for GitHub webhook timeouts
 2. **Global Edge Network**: Instant response times worldwide
@@ -254,4 +254,4 @@ After evaluating all options, Cloudflare Workers emerged as the optimal choice f
 4. **Simplicity**: Minimal operational overhead
 5. **Native Queuing**: Cloudflare Queues integrate seamlessly
 
-For teams with specific requirements or existing infrastructure, the alternatives listed above remain viable options. The modular architecture of ArgoAI allows for relatively easy migration between platforms if needed.
+For teams with specific requirements or existing infrastructure, the alternatives listed above remain viable options. The modular architecture of ArgusAI allows for relatively easy migration between platforms if needed.

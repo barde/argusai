@@ -1,9 +1,9 @@
-# ArgoAI: LLM-Powered GitHub Code Review Bot
+# ArgusAI: LLM-Powered GitHub Code Review Bot
 
 ## Project Overview
 
 ### Concept
-ArgoAI is an intelligent code review bot that automatically analyzes pull requests on GitHub using Large Language Models (LLMs) to provide meaningful feedback, catch potential issues, and suggest improvements. Built on Cloudflare Workers for global edge deployment, the bot aims to augment human code reviews by providing consistent, immediate, and comprehensive analysis with minimal latency.
+ArgusAI is an intelligent code review bot that automatically analyzes pull requests on GitHub using Large Language Models (LLMs) to provide meaningful feedback, catch potential issues, and suggest improvements. Built on Cloudflare Workers for global edge deployment, the bot aims to augment human code reviews by providing consistent, immediate, and comprehensive analysis with minimal latency.
 
 ### Key Features
 - **Automated PR Analysis**: Triggers on new pull requests and updates via GitHub webhooks
@@ -24,26 +24,26 @@ ArgoAI is an intelligent code review bot that automatically analyzes pull reques
 - Scales review capacity for growing teams without infrastructure overhead
 - Global performance with edge computing
 
-## GitHub App Name Reservation: "ArgoAI"
+## GitHub App Name Reservation: "ArgusAI"
 
 ### Important: GitHub App Name Registration Process
 
-GitHub Apps do not have a separate name reservation system. To secure the name "ArgoAI" for your bot:
+GitHub Apps do not have a separate name reservation system. To secure the name "ArgusAI" for your bot:
 
-1. **Act Quickly**: GitHub App names are first-come, first-served. The name "ArgoAI" will be available until someone creates an app with that name.
+1. **Act Quickly**: GitHub App names are first-come, first-served. The name "ArgusAI" will be available until someone creates an app with that name.
 
 2. **Registration Steps**:
    - Go to your GitHub Settings → Developer settings → GitHub Apps
    - Click "New GitHub App"
-   - Enter "ArgoAI" as the GitHub App name
+   - Enter "ArgusAI" as the GitHub App name
    - Fill in the required fields (you can update these later):
-     - Homepage URL: `https://argoai.dev` (can be a placeholder)
-     - Webhook URL: `https://api.argoai.dev/webhooks/github` (can be updated later)
+     - Homepage URL: `https://argusai.dev` (can be a placeholder)
+     - Webhook URL: `https://api.argusai.dev/webhooks/github` (can be updated later)
      - Webhook secret: Generate a secure random string
      - Permissions: Start with minimal permissions (can be expanded later)
 
 3. **Name Requirements**:
-   - Maximum 34 characters (ArgoAI is only 6 characters ✓)
+   - Maximum 34 characters (ArgusAI is only 7 characters ✓)
    - Must be unique across all GitHub
    - Will be displayed as lowercase with special characters replaced
 
@@ -53,15 +53,15 @@ GitHub Apps do not have a separate name reservation system. To secure the name "
    - GitHub prohibits name squatting - you must actively use the app
    - The app doesn't need to be functional immediately after registration
 
-5. **Fallback Names** (if ArgoAI is taken):
-   - ArgoAI-Bot
-   - ArgoCodeReview
-   - ArgoReviewer
-   - Argo-AI
-   - ArgoAI-CR
+5. **Fallback Names** (if ArgusAI is taken):
+   - ArgusAI-Bot
+   - ArgusCodeReview
+   - ArgusReviewer
+   - Argus-AI
+   - ArgusAI-CR
 
 ### Action Items for Name Registration
-1. **Immediately**: Register the GitHub App with name "ArgoAI"
+1. **Immediately**: Register the GitHub App with name "ArgusAI"
 2. **Within 24 hours**: Set up basic webhook endpoint
 3. **Within 1 week**: Deploy initial version to maintain active status
 
@@ -245,7 +245,7 @@ export default {
 
 ## Platform Choice: Cloudflare Workers
 
-We've chosen Cloudflare Workers as the primary platform for ArgoAI due to its:
+We've chosen Cloudflare Workers as the primary platform for ArgusAI due to its:
 - **Zero cold starts** - Critical for GitHub webhook timeouts
 - **Global edge deployment** - Sub-50ms response times worldwide
 - **Native queuing** - Cloudflare Queues for async processing
@@ -260,7 +260,7 @@ For alternative hosting options and detailed comparisons, see [hosting-alternati
 
 #### wrangler.toml - Main Configuration
 ```toml
-name = "argoai"
+name = "argusai"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 workers_dev = false
@@ -268,7 +268,7 @@ workers_dev = false
 # Production environment
 [env.production]
 routes = [
-  { pattern = "api.argoai.dev/*", zone_name = "argoai.dev" }
+  { pattern = "api.argusai.dev/*", zone_name = "argusai.dev" }
 ]
 
 # KV Namespaces
@@ -280,26 +280,26 @@ kv_namespaces = [
 
 # D1 Database (optional - only for config storage)
 # d1_databases = [
-#   { binding = "DB", database_name = "argoai-config", database_id = "your-d1-id" }
+#   { binding = "DB", database_name = "argusai-config", database_id = "your-d1-id" }
 # ]
 
 # Queues
 [env.production.queues]
 producers = [
-  { binding = "REVIEW_QUEUE", queue = "argoai-reviews" }
+  { binding = "REVIEW_QUEUE", queue = "argusai-reviews" }
 ]
 consumers = [
-  { queue = "argoai-reviews", max_batch_size = 10, max_batch_timeout = 30 }
+  { queue = "argusai-reviews", max_batch_size = 10, max_batch_timeout = 30 }
 ]
 
 # R2 Buckets (optional - use Logpush instead for logs)
 # r2_buckets = [
-#   { binding = "LOGS", bucket_name = "argoai-logs" }
+#   { binding = "LOGS", bucket_name = "argusai-logs" }
 # ]
 
 # Service Bindings (for multi-worker architecture)
 services = [
-  { binding = "ANALYTICS", service = "argoai-analytics" }
+  { binding = "ANALYTICS", service = "argusai-analytics" }
 ]
 
 # Environment Variables (non-secret)
@@ -488,7 +488,7 @@ export class CodeReviewer {
         messages: [
           {
             role: 'system',
-            content: `You are ArgoAI, an expert code reviewer. Focus on:
+            content: `You are ArgusAI, an expert code reviewer. Focus on:
               - Security vulnerabilities
               - Performance issues
               - Code quality and best practices
@@ -602,7 +602,7 @@ export class GitHubCommenter {
   }
   
   private formatComment(comment: ReviewComment): string {
-    return `🤖 **ArgoAI Review**\n\n${comment.message}\n\n` +
+    return `🤖 **ArgusAI Review**\n\n${comment.message}\n\n` +
            `**Severity:** ${comment.severity}\n` +
            `**Category:** ${comment.category}`
   }
@@ -815,8 +815,8 @@ export function setupAnalytics(env: Env): void {
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/argoai.git
-cd argoai
+git clone https://github.com/yourusername/argusai.git
+cd argusai
 
 # 2. Install dependencies
 npm install
@@ -830,7 +830,7 @@ wrangler kv:namespace create "RATE_LIMITS"
 wrangler kv:namespace create "CONFIG"
 
 # 5. Create Queue
-wrangler queues create argoai-reviews
+wrangler queues create argusai-reviews
 
 # 6. Set secrets
 wrangler secret put GITHUB_APP_PRIVATE_KEY
@@ -841,13 +841,13 @@ wrangler secret put GITHUB_TOKEN  # GitHub PAT with models:read scope
 wrangler deploy --env production
 
 # 9. Set up custom domain
-# Add CNAME record: api.argoai.dev -> argoai.workers.dev
+# Add CNAME record: api.argusai.dev -> argusai.workers.dev
 ```
 
 ### GitHub App Configuration
 
-1. Go to GitHub Settings → Developer settings → GitHub Apps → ArgoAI
-2. Update Webhook URL to: `https://api.argoai.dev/webhooks/github`
+1. Go to GitHub Settings → Developer settings → GitHub Apps → ArgusAI
+2. Update Webhook URL to: `https://api.argusai.dev/webhooks/github`
 3. Set permissions:
    - Pull requests: Read & Write
    - Issues: Write (for comments)
@@ -880,7 +880,7 @@ wrangler deploy --env production
 # Example: Configure Logpush to S3
 wrangler logpush create \
   --dataset workers_trace_events \
-  --destination "s3://your-bucket/argoai-logs" \
+  --destination "s3://your-bucket/argusai-logs" \
   --fields "timestamp,outcome,scriptName,logs"
 ```
 
@@ -908,14 +908,14 @@ For a team with ~1000 PRs/day:
 - Batch queue processing to reduce invocations
 
 ### Cost Comparison
-- **ArgoAI (Cloudflare + GitHub Models)**: $0-2/month
+- **ArgusAI (Cloudflare + GitHub Models)**: $0-2/month
 - **Traditional LLM Integration**: $50-500/month
 - **AWS Lambda + OpenAI**: $100-300/month
 - **Kubernetes + Self-hosted**: $500-2000/month
 
 ## Conclusion
 
-ArgoAI represents a paradigm shift in code review automation by combining:
+ArgusAI represents a paradigm shift in code review automation by combining:
 
 1. **GitHub Models Integration** - Free tier LLM access with your GitHub token
 2. **Edge-First Architecture** - Cloudflare Workers for zero cold starts
@@ -932,23 +932,23 @@ ArgoAI represents a paradigm shift in code review automation by combining:
 
 ### Getting Started in 15 Minutes
 
-1. **Register "ArgoAI" GitHub App** (5 min)
+1. **Register "ArgusAI" GitHub App** (5 min)
    - Go to Settings → Developer settings → GitHub Apps → New
-   - Name: ArgoAI
-   - Webhook URL: `https://api.argoai.dev/webhooks/github` (update later)
+   - Name: ArgusAI
+   - Webhook URL: `https://api.argusai.dev/webhooks/github` (update later)
    - Permissions: Pull requests (Read & Write), Issues (Write), Contents (Read)
 
 2. **Create GitHub Token for Models** (1 min)
    - Go to Settings → Developer settings → Personal access tokens → Fine-grained tokens
-   - Name: ArgoAI Models Access
+   - Name: ArgusAI Models Access
    - Expiration: 90 days (or custom)
    - Permissions: Only `models:read` required
    - Copy the token (starts with `github_pat_`)
 
 3. **Deploy to Cloudflare Workers** (5 min)
    ```bash
-   git clone https://github.com/yourusername/argoai.git
-   cd argoai
+   git clone https://github.com/yourusername/argusai.git
+   cd argusai
    npm install
    wrangler login
    wrangler secret put GITHUB_TOKEN
@@ -962,7 +962,7 @@ ArgoAI represents a paradigm shift in code review automation by combining:
 
 5. **Start reviewing PRs!** (∞)
    - Install the app on your repositories
-   - Open a PR and watch ArgoAI review it instantly
+   - Open a PR and watch ArgusAI review it instantly
 
 The combination of GitHub Models and Cloudflare Workers makes enterprise-grade code review automation accessible to everyone - from indie developers to large organizations. No more choosing between quality and cost.
 

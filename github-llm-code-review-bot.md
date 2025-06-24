@@ -96,13 +96,14 @@ GitHub Apps do not have a separate name reservation system. To secure the name "
                                  │
                   ┌──────────────┴──────────────┬─────────────────┐
                   │                             │                 │
-         ┌────────▼─────────┐          ┌───────▼──────┐  ┌───────▼──────┐
-         │                  │          │              │  │              │
-         │  Workers KV      │          │ Workers D1   │  │ GitHub API   │
-         │  - Cache results │          │ - PR states  │  │ - Comments   │
-         │  - Rate limits   │          │ - Audit logs │  │ - Reactions  │
-         │                  │          │              │  │              │
-         └──────────────────┘          └──────────────┘  └──────────────┘
+         ┌────────▼─────────┐                            ┌───────▼──────┐
+         │                  │                            │              │
+         │  Workers KV      │                            │ GitHub API   │
+         │  - Cache results │                            │ - Comments   │
+         │  - Rate limits   │                            │ - Reactions  │
+         │  - Config store  │                            │ - PR status  │
+         │                  │                            │              │
+         └──────────────────┘                            └──────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        Cloudflare Global Network                        │
@@ -797,9 +798,9 @@ export function setupAnalytics(env: Env): void {
 ### Phase 2: Production Features (Week 1)
 - Implement Cloudflare Queues for async processing
 - Add Workers KV caching layer
-- Set up D1 database for review history
+- Configure KV-based configuration management
 - Implement rate limiting
-- Add structured logging to R2
+- Add structured logging with Logpush
 - Error handling with retries
 
 ### Phase 3: Advanced Features (Week 2)

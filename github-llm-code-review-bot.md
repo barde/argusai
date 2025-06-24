@@ -72,26 +72,36 @@ GitHub Apps do not have a separate name reservation system. To secure the name "
 ```
 ┌─────────────────┐     ┌──────────────────────────┐     ┌─────────────────────┐
 │                 │     │                          │     │                     │
-│  GitHub Events  ├────►│  Cloudflare Workers      ├────►│   LLM Provider API  │
-│   (Webhooks)    │     │  (Global Edge Network)   │     │  (OpenAI/Claude)    │
-│                 │     │                          │     │                     │
-└─────────────────┘     └────────┬─────────────────┘     └─────────────────────┘
-                                 │                                    ▲
-                                 │                                    │
-                        ┌────────▼─────────────────┐                 │
-                        │                          │                 │
-                        │  Worker Entry Point      │                 │
-                        │  - Webhook validation    │                 │
-                        │  - Request routing       │                 │
-                        │  - Rate limiting         │                 │
-                        └────────┬─────────────────┘                 │
-                                 │                                    │
-                        ┌────────▼─────────────────┐                 │
-                        │                          │                 │
-                        │  Review Worker           ├─────────────────┘
+│  GitHub Events  ├────►│  Cloudflare Workers      │     │   LLM Provider      │
+│   (Webhooks)    │     │  (Global Edge Network)   │     │  (GitHub Models/    │
+│                 │     │                          │     │   Custom Provider)  │
+└─────────────────┘     └────────┬─────────────────┘     └──────────▲──────────┘
+                                 │                                   │
+                                 │                                   │
+                        ┌────────▼─────────────────┐                │
+                        │                          │                │
+                        │  Webhook Handler         │                │
+                        │  - Signature validation  │                │
+                        │  - Rate limiting         │                │
+                        │  - Queue PR for review   │                │
+                        │  - Return 200 instantly  │                │
+                        └────────┬─────────────────┘                │
+                                 │                                   │
+                        ┌────────▼─────────────────┐                │
+                        │                          │                │
+                        │  Cloudflare Queue        │                │
+                        │  - Async processing      │                │
+                        │  - Automatic retries     │                │
+                        │  - Dead letter queue     │                │
+                        └────────┬─────────────────┘                │
+                                 │                                   │
+                        ┌────────▼─────────────────┐                │
+                        │                          │                │
+                        │  Review Consumer         ├────────────────┘
                         │  - Fetch PR diff         │
-                        │  - Build LLM prompt      │
-                        │  - Process response      │
+                        │  - Check cache           │
+                        │  - Call LLM async       │
+                        │  - Post comments         │
                         └────────┬─────────────────┘
                                  │
                   ┌──────────────┴──────────────┬─────────────────┐
@@ -120,32 +130,50 @@ GitHub Apps do not have a separate name reservation system. To secure the name "
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     // Validate GitHub webhook signature
-    // Route to appropriate handler
-    // Return immediate response to GitHub
+    // Queue review task for async processing
+    // Return 200 OK immediately to GitHub
+    return new Response('Webhook received', { status: 200 })
   }
 }
 ```
 - Validates webhook signatures using Web Crypto API
 - Filters relevant events (PR opened, synchronized, etc.)
-- Triggers review processing via Service Bindings
-- Returns response in <50ms globally
+- Queues review tasks to Cloudflare Queue for async processing
+- Returns 200 OK immediately (<50ms) - doesn't wait for LLM
 
-#### 2. **Review Processing Worker**
+#### 2. **Review Consumer (Queue Processor)**
 ```typescript
-// Handles the actual review logic
-export class ReviewWorker {
-  async processReview(pr: PullRequest): Promise<void> {
-    // Fetch PR diff from GitHub
-    // Build context-aware LLM prompt
-    // Stream response from LLM
-    // Post comments back to GitHub
+// Processes queued reviews asynchronously
+export default {
+  async queue(batch: MessageBatch<ReviewTask>, env: Env): Promise<void> {
+    for (const message of batch.messages) {
+      try {
+        // Check cache first
+        const cached = await checkCache(message.body.sha)
+        if (cached) {
+          await postCachedReview(cached)
+          message.ack()
+          continue
+        }
+        
+        // Fetch PR diff from GitHub
+        // Call LLM provider (can take 5-30 seconds)
+        // Post comments back to GitHub
+        // Cache results
+        await processReview(message.body, env)
+        message.ack()
+      } catch (error) {
+        message.retry() // Automatic exponential backoff
+      }
+    }
   }
 }
 ```
-- Fetches PR diff and file contents via GitHub API
-- Constructs intelligent LLM prompts with context
-- Handles streaming responses from LLM providers
-- Posts structured comments to GitHub
+- Runs independently from webhook handler
+- Processes reviews without blocking webhook responses
+- Can take as long as needed for LLM calls (5-30 seconds)
+- Automatic retries on LLM provider failures
+- Caches results to handle duplicate webhooks efficiently
 
 #### 3. **Why Workers KV is Essential**
 
@@ -444,7 +472,7 @@ export async function handlePullRequestEvent(
     return
   }
   
-  // Queue the review task
+  // Queue the review task - this is non-blocking
   await env.REVIEW_QUEUE.send({
     type: 'review',
     timestamp: Date.now(),
@@ -457,10 +485,13 @@ export async function handlePullRequestEvent(
       filesUrl: pull_request.url + '/files'
     }
   })
+  
+  // Function returns immediately without waiting for LLM processing
+  // GitHub receives 200 OK in <50ms regardless of LLM response time
 }
 ```
 
-### 2. LLM Integration with GitHub Models
+### 2. LLM Integration (Vendor-Agnostic)
 
 ```typescript
 // src/llm/reviewer.ts

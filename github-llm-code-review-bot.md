@@ -8,7 +8,7 @@ ArgusAI is an intelligent code review bot that automatically analyzes pull reque
 ### Key Features
 - **Automated PR Analysis**: Triggers on new pull requests and updates via GitHub webhooks
 - **Context-Aware Reviews**: Understands project structure and coding patterns
-- **Multi-Language Support**: Reviews code in various programming languages
+- **TypeScript Focus**: Optimized for TypeScript/JavaScript codebases
 - **Configurable Rules**: Customizable review criteria via environment variables
 - **Incremental Reviews**: Analyzes only changed files/lines for efficiency
 - **Smart Comments**: Posts actionable, non-redundant feedback
@@ -268,26 +268,33 @@ export default {
 - Batch processing for efficiency (up to 10 messages)
 - At-least-once delivery guarantee
 
-### Technology Stack - Cloudflare Workers SDK (2025)
+### Technology Stack - Cloudflare Workers (2025)
 
-Following the principles from [Cloudflare Workers SDK](https://github.com/cloudflare/workers-sdk) with 2025 enhancements:
+Leveraging the full Cloudflare platform with 2025 enhancements:
 
 #### Core Platform
-- **Runtime**: Cloudflare Workers (V8 Isolates) + Container support (June 2025)[^30]
-- **Languages**: TypeScript + Python (native support as of 2025)[^29]
-- **API Framework**: Hono (lightweight) or FastAPI (Python)[^29]
-- **Queue**: Cloudflare Queues (native integration, enhanced in 2025)
-- **Storage**: Workers KV only (no D1 - staying edge-native)
+- **Runtime**: Cloudflare Workers (V8 Isolates) - zero cold starts
+- **Language**: TypeScript (strict mode with `@cloudflare/workers-types`)
+- **API Framework**: Hono v4 (used internally by Cloudflare for D1, KV, Queues)[^37]
+- **Queue**: Cloudflare Queues (6 concurrent builds on paid plans)[^38]
+- **Storage**: Workers KV + R2 for large files (no D1 - edge-native)
 - **LLM Integration**: GitHub Models API + Workers AI (300 req/min)[^28]
 - **AI Features**: Cloudy AI agent for configuration optimization[^31]
 
-#### Development Best Practices (Workers SDK)
-- **Project Creation**: `npm create cloudflare@latest`
-- **Local Development**: Miniflare simulator for accurate edge behavior
+#### 2025 Platform Enhancements
+- **Vite Plugin GA**: Full HMR support with Workers runtime (workerd)[^39]
+- **Hyperdrive**: Connection pooling for external databases[^29]
+- **Workflows**: Durable execution for multi-step LLM processing[^30]
+- **Smart Placement**: Automatic optimal location selection
+- **Workers Analytics**: Real-time metrics and observability
+
+#### Development Best Practices
+- **Project Creation**: `npm create cloudflare@latest` with Hono template
+- **Local Development**: Vite dev server running in Workers runtime
 - **Testing**: Vitest with `@cloudflare/vitest-pool-workers`
-- **Type Safety**: Full TypeScript with Workers types
-- **Deployment**: Wrangler CLI with `wrangler deploy`
-- **Monitoring**: Built-in Workers Analytics
+- **Type Safety**: First-class TypeScript with type-safe bindings
+- **Deployment**: Wrangler v3 with enhanced build system
+- **Monitoring**: Built-in analytics + Logpush integration
 
 #### Key Workers SDK Principles Applied
 1. **Stateless Architecture**: No persistent databases, all state in KV
@@ -863,11 +870,12 @@ Following Helicone's observability patterns[^12]:
 Leveraging Cloudflare's latest AI improvements[^16][^27]:
 
 - **Workers AI GA**: Now generally available with 300 requests/minute for most LLMs (up from 50)[^28]
-- **Python Support**: Native Python support in Workers enables use of LangChain and FastAPI[^29]
-- **Container Support (June 2025)**: Run LLM-generated code in secure sandboxes[^30]
+- **TypeScript Performance**: Optimized V8 runtime with native async/await support
+- **Edge SQL (2025)**: Hyperdrive for connecting to external databases with automatic pooling[^29]
 - **Cloudy AI Agent**: Leverage Cloudflare's AI agent for optimizing configurations[^31]
 - **KV Cache Compression**: Open-source techniques for faster LLM inference[^32]
 - **Global GPU Network**: GPUs in 190+ cities for ultra-low latency inference
+- **Workflows**: Durable execution for complex multi-step LLM processing[^30]
 
 ### 7. **Event-Driven Architecture Best Practices (2025)**
 
@@ -1110,7 +1118,7 @@ The combination of GitHub Models and Cloudflare Workers makes enterprise-grade c
 
 ## References
 
-[^1]: Unite.AI (2024). "Asynchronous LLM API Calls in Python: A Comprehensive Guide". https://www.unite.ai/asynchronous-llm-api-calls-in-python-a-comprehensive-guide/
+[^1]: Unite.AI (2024). "Asynchronous LLM API Calls: A Comprehensive Guide". https://www.unite.ai/asynchronous-llm-api-calls-in-python-a-comprehensive-guide/
 
 [^2]: Dev.co (2024). "Building an Async Prompt Queue for High-Volume LLM Serving". https://dev.co/ai/async-prompt-queue-for-llms
 
@@ -1118,7 +1126,7 @@ The combination of GitHub Models and Cloudflare Workers makes enterprise-grade c
 
 [^4]: Microsoft Learn (2024). "Asynchronous Request-Reply pattern - Azure Architecture Center". https://learn.microsoft.com/en-us/azure/architecture/patterns/async-request-reply
 
-[^5]: DataCamp (2024). "Serving an LLM application as an API endpoint using FastAPI in Python". https://www.datacamp.com/tutorial/serving-an-llm-application-as-an-api-endpoint-using-fastapi-in-python
+[^5]: Cloudflare Docs (2024). "Workers AI Response Streaming". https://developers.cloudflare.com/workers-ai/configuration/response-streaming/
 
 [^6]: Hookdeck (2024). "Why Implement Asynchronous Processing of Webhooks". https://hookdeck.com/webhooks/guides/why-implement-asynchronous-processing-webhooks
 
@@ -1166,9 +1174,9 @@ The combination of GitHub Models and Cloudflare Workers makes enterprise-grade c
 
 [^28]: Cloudflare Blog (2025). "Leveling up Workers AI: general availability and more new capabilities". https://blog.cloudflare.com/workers-ai-ga-huggingface-loras-python-support/
 
-[^29]: Cloudflare Blog (2025). "Python Support for Workers". https://blog.cloudflare.com/python-workers
+[^29]: Cloudflare Docs (2025). "Hyperdrive - Connect to databases from Workers". https://developers.cloudflare.com/hyperdrive/
 
-[^30]: Cloudflare Blog (2025). "Simple, scalable, and global: Containers are coming to Cloudflare Workers in June 2025". https://blog.cloudflare.com/cloudflare-containers-coming-2025/
+[^30]: Cloudflare Docs (2025). "Workflows - Durable execution on Workers". https://developers.cloudflare.com/workflows/
 
 [^31]: Cloudflare Blog (2025). "Introducing Cloudy, Cloudflare's AI agent for simplifying complex configurations". https://blog.cloudflare.com/introducing-ai-agent/
 
@@ -1181,3 +1189,9 @@ The combination of GitHub Models and Cloudflare Workers makes enterprise-grade c
 [^35]: InfoQ (2025). "Designing Resilient Event-Driven Systems at Scale". https://www.infoq.com/articles/scalable-resilient-event-systems/
 
 [^36]: Towards Data Science (2025). "Deep Dive into LlamaIndex Workflow: Event-Driven LLM Architecture". https://towardsdatascience.com/deep-dive-into-llamaindex-workflow-event-driven-llm-architecture-8011f41f851a/
+
+[^37]: Cloudflare Blog (2025). "The story of web framework Hono, from the creator of Hono". https://blog.cloudflare.com/the-story-of-web-framework-hono-from-the-creator-of-hono/
+
+[^38]: Cloudflare Blog (2025). "Workers Builds new pricing model". https://blog.cloudflare.com/workers-builds-pricing-2025
+
+[^39]: Cloudflare Blog (2025). "Your frontend, backend, and database — now in one Cloudflare Worker". https://blog.cloudflare.com/full-stack-development-on-cloudflare-workers/

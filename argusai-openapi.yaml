@@ -1,0 +1,621 @@
+openapi: 3.1.0
+info:
+  title: ArgusAI API
+  version: 1.0.0
+  summary: GitHub code review bot powered by LLMs on Cloudflare Workers
+  description: |
+    ArgusAI is an intelligent code review bot that automatically analyzes pull requests 
+    on GitHub using Large Language Models (LLMs) to provide meaningful feedback, catch 
+    potential issues, and suggest improvements. Built on Cloudflare Workers for global 
+    edge deployment with sub-50ms response times.
+  contact:
+    name: ArgusAI Support
+    url: https://github.com/yourusername/argusai
+    email: support@argusai.dev
+  license:
+    name: MIT
+    identifier: MIT
+    url: https://opensource.org/licenses/MIT
+  x-logo:
+    url: https://argusai.dev/logo.png
+    altText: ArgusAI Logo
+
+servers:
+  - url: https://api.argusai.dev
+    description: Production server (Cloudflare Workers)
+  - url: http://localhost:8787
+    description: Local development server (Miniflare)
+
+tags:
+  - name: webhook
+    description: GitHub webhook endpoints
+    x-displayName: Webhooks
+  - name: health
+    description: Health check endpoints
+    x-displayName: Health
+  - name: config
+    description: Configuration management
+    x-displayName: Configuration
+
+paths:
+  /webhooks/github:
+    post:
+      operationId: handleGitHubWebhook
+      summary: GitHub webhook endpoint
+      description: |
+        Receives webhook events from GitHub for pull request activities.
+        Validates webhook signatures and processes events asynchronously.
+      tags:
+        - webhook
+      security:
+        - githubWebhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/PullRequestEvent'
+                - $ref: '#/components/schemas/PullRequestReviewEvent'
+                - $ref: '#/components/schemas/PullRequestReviewCommentEvent'
+            examples:
+              pullRequestOpened:
+                summary: Pull request opened
+                value:
+                  action: opened
+                  number: 42
+                  pull_request:
+                    id: 1
+                    number: 42
+                    state: open
+                    title: "Add new feature"
+                    user:
+                      login: octocat
+                    head:
+                      sha: "ec26c3e57ca3a959ca5aad62de7213c562f8c821"
+                    diff_url: "https://github.com/octocat/Hello-World/pull/42.diff"
+                    url: "https://api.github.com/repos/octocat/Hello-World/pulls/42"
+                  repository:
+                    id: 1296269
+                    full_name: "octocat/Hello-World"
+                    owner:
+                      login: octocat
+                  installation:
+                    id: 1
+      responses:
+        '200':
+          description: Webhook successfully received
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+              example:
+                status: "accepted"
+                message: "Webhook queued for processing"
+                queueId: "queue-123456"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      x-codeSamples:
+        - lang: curl
+          label: GitHub Webhook
+          source: |
+            # GitHub sends this automatically when configured
+            curl -X POST https://api.argusai.dev/webhooks/github \
+              -H "Content-Type: application/json" \
+              -H "X-GitHub-Event: pull_request" \
+              -H "X-GitHub-Delivery: 12345-67890" \
+              -H "X-Hub-Signature-256: sha256=..." \
+              -d '{"action": "opened", "pull_request": {...}}'
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check endpoint
+      description: Returns the health status of the service and its dependencies
+      tags:
+        - health
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: "healthy"
+                timestamp: "2024-06-24T12:00:00Z"
+                version: "1.0.0"
+                dependencies:
+                  github_api: "operational"
+                  llm_provider: "operational"
+                  kv_storage: "operational"
+                  queue: "operational"
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: "unhealthy"
+                timestamp: "2024-06-24T12:00:00Z"
+                version: "1.0.0"
+                dependencies:
+                  github_api: "operational"
+                  llm_provider: "degraded"
+                  kv_storage: "operational"
+                  queue: "operational"
+
+  /config/{repository}:
+    get:
+      operationId: getRepositoryConfig
+      summary: Get repository configuration
+      description: Retrieves the current configuration for a specific repository
+      tags:
+        - config
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/repository'
+      responses:
+        '200':
+          description: Repository configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryConfig'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      operationId: updateRepositoryConfig
+      summary: Update repository configuration
+      description: Updates the configuration for a specific repository
+      tags:
+        - config
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/repository'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepositoryConfig'
+      responses:
+        '200':
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryConfig'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    githubWebhookSignature:
+      type: apiKey
+      in: header
+      name: X-Hub-Signature-256
+      description: |
+        GitHub webhook signature for payload validation.
+        Computed as: `sha256=` + HMAC hex digest of the request body using webhook secret
+
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for API authentication
+
+  parameters:
+    repository:
+      name: repository
+      in: path
+      required: true
+      description: Repository in format "owner/name"
+      schema:
+        type: string
+        pattern: '^[a-zA-Z0-9][\w.-]*/[\w.-]+$'
+      example: "octocat/Hello-World"
+
+  schemas:
+    WebhookResponse:
+      type: object
+      required:
+        - status
+        - message
+      properties:
+        status:
+          type: string
+          enum: [accepted, rejected]
+          description: Whether the webhook was accepted for processing
+        message:
+          type: string
+          description: Human-readable status message
+        queueId:
+          type: string
+          description: Queue ID for tracking the review process
+
+    PullRequestEvent:
+      type: object
+      required:
+        - action
+        - number
+        - pull_request
+        - repository
+        - installation
+      properties:
+        action:
+          type: string
+          enum: [opened, synchronize, reopened, closed, edited]
+          description: The action that was performed
+        number:
+          type: integer
+          description: The pull request number
+        pull_request:
+          $ref: '#/components/schemas/PullRequest'
+        repository:
+          $ref: '#/components/schemas/Repository'
+        installation:
+          $ref: '#/components/schemas/Installation'
+
+    PullRequestReviewEvent:
+      type: object
+      required:
+        - action
+        - review
+        - pull_request
+        - repository
+      properties:
+        action:
+          type: string
+          enum: [submitted, edited, dismissed]
+        review:
+          type: object
+          properties:
+            id:
+              type: integer
+            state:
+              type: string
+              enum: [approved, changes_requested, commented]
+            body:
+              type: string
+        pull_request:
+          $ref: '#/components/schemas/PullRequest'
+        repository:
+          $ref: '#/components/schemas/Repository'
+
+    PullRequestReviewCommentEvent:
+      type: object
+      required:
+        - action
+        - comment
+        - pull_request
+        - repository
+      properties:
+        action:
+          type: string
+          enum: [created, edited, deleted]
+        comment:
+          type: object
+          properties:
+            id:
+              type: integer
+            body:
+              type: string
+            path:
+              type: string
+            line:
+              type: integer
+        pull_request:
+          $ref: '#/components/schemas/PullRequest'
+        repository:
+          $ref: '#/components/schemas/Repository'
+
+    PullRequest:
+      type: object
+      required:
+        - id
+        - number
+        - state
+        - title
+        - user
+        - head
+        - diff_url
+        - url
+      properties:
+        id:
+          type: integer
+          description: Unique identifier
+        number:
+          type: integer
+          description: Pull request number
+        state:
+          type: string
+          enum: [open, closed]
+          description: Current state
+        title:
+          type: string
+          description: Pull request title
+        body:
+          type: string
+          description: Pull request description
+          nullable: true
+        user:
+          type: object
+          properties:
+            login:
+              type: string
+              description: GitHub username
+        head:
+          type: object
+          properties:
+            sha:
+              type: string
+              description: Git commit SHA
+        diff_url:
+          type: string
+          format: uri
+          description: URL to the diff
+        url:
+          type: string
+          format: uri
+          description: API URL for the pull request
+
+    Repository:
+      type: object
+      required:
+        - id
+        - full_name
+        - owner
+      properties:
+        id:
+          type: integer
+          description: Repository ID
+        full_name:
+          type: string
+          description: Full repository name (owner/name)
+          example: "octocat/Hello-World"
+        owner:
+          type: object
+          properties:
+            login:
+              type: string
+              description: Owner username
+
+    Installation:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: integer
+          description: GitHub App installation ID
+
+    HealthStatus:
+      type: object
+      required:
+        - status
+        - timestamp
+        - version
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          description: Overall health status
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+        version:
+          type: string
+          description: API version
+        dependencies:
+          type: object
+          properties:
+            github_api:
+              type: string
+              enum: [operational, degraded, down]
+            llm_provider:
+              type: string
+              enum: [operational, degraded, down]
+            kv_storage:
+              type: string
+              enum: [operational, degraded, down]
+            queue:
+              type: string
+              enum: [operational, degraded, down]
+
+    RepositoryConfig:
+      type: object
+      required:
+        - enabled
+        - model
+        - maxFilesPerPR
+        - filePatterns
+      properties:
+        enabled:
+          type: boolean
+          description: Whether reviews are enabled for this repository
+          default: true
+        model:
+          type: string
+          description: LLM model to use for reviews
+          default: "gpt-4o-mini"
+          enum:
+            - gpt-4o-mini
+            - gpt-4o
+            - Phi-3-small-8k-instruct
+            - Meta-Llama-3.1-8B-Instruct
+        maxFilesPerPR:
+          type: integer
+          description: Maximum files to review per PR
+          minimum: 1
+          maximum: 100
+          default: 20
+        maxLinesPerFile:
+          type: integer
+          description: Maximum lines to review per file
+          minimum: 100
+          maximum: 5000
+          default: 1000
+        filePatterns:
+          type: array
+          description: File patterns to include in reviews
+          items:
+            type: string
+          default:
+            - "**/*.{js,ts,jsx,tsx}"
+            - "**/*.{py,pyw}"
+            - "**/*.{java,kt}"
+            - "**/*.{go}"
+            - "**/*.{rs}"
+            - "**/*.{c,cpp,h,hpp}"
+        ignorePatterns:
+          type: array
+          description: File patterns to exclude from reviews
+          items:
+            type: string
+          default:
+            - "**/node_modules/**"
+            - "**/vendor/**"
+            - "**/*.min.js"
+            - "**/dist/**"
+            - "**/build/**"
+        reviewPromptTemplate:
+          type: string
+          description: Custom prompt template name
+          nullable: true
+        autoApprove:
+          type: boolean
+          description: Auto-approve PRs with no issues found
+          default: false
+        commentThreshold:
+          type: string
+          description: Minimum severity to post comments
+          enum: [info, warning, error]
+          default: "warning"
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "invalid_request"
+            message: "Invalid request format"
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "unauthorized"
+            message: "Invalid or missing authentication"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "not_found"
+            message: "Repository configuration not found"
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: Request limit per minute
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests in window
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+          description: Unix timestamp when limit resets
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "rate_limit_exceeded"
+            message: "Too many requests, please try again later"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "internal_error"
+            message: "An unexpected error occurred"
+
+webhooks:
+  pullRequestActivity:
+    post:
+      requestBody:
+        description: GitHub sends pull request events when configured
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PullRequestEvent'
+      responses:
+        '200':
+          description: Webhook processed successfully
+
+x-readme:
+  headers: 
+    - name: X-Hub-Signature-256
+      description: |
+        GitHub webhook signature header. This is automatically included by GitHub
+        when sending webhooks. The signature is computed as:
+        `sha256=` + HMAC hex digest of the request body using the webhook secret.
+        
+        ArgusAI validates this signature to ensure the webhook is from GitHub.
+  explorer-enabled: true
+  proxy-enabled: true
+  samples-languages:
+    - curl
+    - javascript
+    - python
+    - go

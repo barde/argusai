@@ -80,9 +80,9 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
     // Log webhook response time (should be <50ms)
     const processingTime = Date.now() - startTime;
     console.log(`Webhook responded in ${processingTime}ms`, {
-      repository: reviewData.repository,
-      pr: reviewData.prNumber,
-      action: reviewData.action,
+      repository: payload.repository.full_name,
+      pr: payload.pull_request.number,
+      action: payload.action,
       deliveryId,
     });
 

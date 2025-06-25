@@ -53,3 +53,4 @@ export interface ReviewMetadata {
 }
 
 export type { PullRequestEvent, PullRequest };
+export type WebhookPayload = PullRequestEvent;

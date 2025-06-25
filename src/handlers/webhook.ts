@@ -4,7 +4,7 @@ import { isDuplicateEvent } from '../utils/deduplication';
 import { checkRateLimit } from '../utils/rateLimit';
 import type { Env } from '../types/env';
 import type { GitHubWebhookHeaders, PullRequestEvent } from '../types/github';
-import { processReviewAsync } from '../services/review';
+import { processReviewWithRetry } from '../services/review-processor';
 
 export async function webhookHandler(c: Context<{ Bindings: Env }>) {
   const startTime = Date.now();
@@ -71,27 +71,10 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
 
     // Process the review asynchronously using event.waitUntil
     // This allows us to return a response immediately while processing continues
-    const reviewData = {
-      repository: payload.repository.full_name,
-      prNumber: payload.pull_request.number,
-      installationId: payload.installation?.id || 0,
-      action: payload.action,
-      sha: payload.pull_request.head.sha,
-      timestamp: Date.now(),
-      eventId: deliveryId,
-      payload,
-    };
-
     // Return response immediately for fast webhook processing
-    // The actual review processing happens asynchronously
+    // The actual review processing happens asynchronously with retry logic
     c.executionCtx.waitUntil(
-      processReviewAsync(reviewData, c.env).catch((error) => {
-        console.error('Failed to process review:', error, {
-          repository: reviewData.repository,
-          pr: reviewData.prNumber,
-          deliveryId,
-        });
-      })
+      processReviewWithRetry(c.env, payload, deliveryId)
     );
 
     // Log webhook response time (should be <50ms)

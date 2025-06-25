@@ -1,4 +1,4 @@
-# GitHub App credentials
+# GitHub App credentials (required)
 GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
 GITHUB_WEBHOOK_SECRET="your-webhook-secret"
 GITHUB_TOKEN="github_pat_your_token_with_models_read_permission"
@@ -6,3 +6,6 @@ GITHUB_TOKEN="github_pat_your_token_with_models_read_permission"
 # Optional integrations
 SENTRY_DSN="https://xxx@xxx.ingest.sentry.io/xxx"
 SLACK_WEBHOOK_URL="https://hooks.slack.com/services/xxx/xxx/xxx"
+
+# Free tier note: No queue-related secrets needed
+# Logging is done via console.log() and wrangler tail

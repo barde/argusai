@@ -8,14 +8,15 @@ ArgusAI is an intelligent GitHub code review bot powered by LLMs, deployed on Cl
 
 ## Key Architecture Components
 
-### Three-Layer Architecture
-1. **Webhook Handler** (src/index.ts) - Receives GitHub webhooks, validates signatures, queues tasks
-2. **Queue Consumer** (src/consumer.ts) - Processes reviews asynchronously via Cloudflare Queues
+### Free Tier Architecture
+1. **Webhook Handler** (src/handlers/webhook.ts) - Receives webhooks, validates, returns fast response
+2. **Async Processing** (event.waitUntil) - Processes reviews asynchronously without queues
 3. **Storage Layer** (Workers KV) - Caches reviews, rate limits, and configurations
 
 ### Core Services
 - **LLM Service** (src/services/llm.ts) - GitHub Models API integration
 - **GitHub Service** (src/services/github.ts) - Octokit-based PR interactions
+- **Review Service** (src/services/review.ts) - Async review processing logic
 - **Storage Service** (src/services/storage.ts) - KV-based caching and rate limiting
 - **Config Service** (src/services/config.ts) - Per-repository configuration
 
@@ -50,9 +51,13 @@ wrangler secret put GITHUB_TOKEN  # GitHub PAT with models:read scope
 wrangler deploy --env production
 ```
 
-### Queue Management
+### Logging
 ```bash
-wrangler queues create argusai-reviews  # Create queue (one-time)
+# View real-time logs
+wrangler tail
+
+# View logs for specific environment
+wrangler tail --env production
 ```
 
 ### KV Namespace Creation
@@ -67,24 +72,20 @@ wrangler kv:namespace create "CONFIG"
 ### GitHub Webhook Signature Validation
 - Must validate `X-Hub-Signature-256` header using HMAC-SHA256
 - Return 401 if signature is invalid
-- Process must complete in <50ms to avoid timeouts
-
-### Queue Message Format
-```typescript
-interface ReviewMessage {
-  repository: string;
-  prNumber: number;
-  installationId: number;
-  action: 'opened' | 'synchronize';
-  timestamp: number;
-}
-```
+- Return response in <50ms using early response pattern
+- Use event.waitUntil() for async processing
 
 ### KV Storage Patterns
 - **Cache keys**: `review:${owner}/${repo}/${pr}:${sha}`
 - **Rate limit keys**: `rate:${installationId}:${window}`
 - **Config keys**: `config:${owner}/${repo}`
 - **Dedup keys**: `dedup:${owner}/${repo}/${pr}:${eventId}`
+
+### Free Tier Limits
+- **Workers**: 100,000 requests/day
+- **KV Reads**: 100,000/day
+- **KV Writes**: 1,000/day (1 write/second limit)
+- **CPU Time**: 10ms per request (use waitUntil for longer tasks)
 
 ### GitHub Models API
 - Endpoint: `https://api.github.com/chat/completions`
@@ -110,25 +111,19 @@ id = "your-rate-limits-namespace-id"
 binding = "CONFIG"
 id = "your-config-namespace-id"
 
-[[queues.producers]]
-binding = "REVIEW_QUEUE"
-queue = "argusai-reviews"
-
-[[queues.consumers]]
-queue = "argusai-reviews"
-max_batch_size = 10
-max_retries = 3
+# No queues needed for free tier
+# Processing happens via event.waitUntil()
 ```
 
 ## Project Status
 
-Currently in documentation phase. No source code exists yet. When implementing:
+Currently implementing free tier architecture. When implementing:
 
-1. Start with Phase 1 issues (#2, #3, #4) - can be done in parallel
-2. Webhook handler (#5) must be completed before queue consumer (#6)
-3. GitHub Models integration (#7) can be developed independently
-4. Features in Phase 3 (#8, #9, #10) can all be done in parallel
-5. Always run linting/type checking before committing (commands TBD based on package.json setup)
+1. Webhook handler with event.waitUntil() pattern
+2. Review processing service for async operations
+3. GitHub Models integration for LLM analysis
+4. Simple logging using console.log() and wrangler tail
+5. KV storage with awareness of 1 write/second limit
 
 ## Key Dependencies
 

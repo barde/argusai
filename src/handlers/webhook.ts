@@ -2,8 +2,9 @@ import { Context } from 'hono';
 import { validateWebhookSignature } from '../utils/crypto';
 import { isDuplicateEvent } from '../utils/deduplication';
 import { checkRateLimit } from '../utils/rateLimit';
-import type { Env, ReviewMessage } from '../types/env';
+import type { Env } from '../types/env';
 import type { GitHubWebhookHeaders, PullRequestEvent } from '../types/github';
+import { processReviewAsync } from '../services/review';
 
 export async function webhookHandler(c: Context<{ Bindings: Env }>) {
   const startTime = Date.now();
@@ -68,32 +69,43 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
       return c.json({ error: 'Rate limit exceeded' }, 429);
     }
 
-    // Queue the review
-    const message: ReviewMessage = {
+    // Process the review asynchronously using event.waitUntil
+    // This allows us to return a response immediately while processing continues
+    const reviewData = {
       repository: payload.repository.full_name,
       prNumber: payload.pull_request.number,
       installationId: payload.installation?.id || 0,
-      action: payload.action as ReviewMessage['action'],
+      action: payload.action,
       sha: payload.pull_request.head.sha,
       timestamp: Date.now(),
       eventId: deliveryId,
-      retryCount: 0,
+      payload,
     };
 
-    await c.env.REVIEW_QUEUE.send(message);
+    // Return response immediately for fast webhook processing
+    // The actual review processing happens asynchronously
+    c.executionCtx.waitUntil(
+      processReviewAsync(reviewData, c.env).catch((error) => {
+        console.error('Failed to process review:', error, {
+          repository: reviewData.repository,
+          pr: reviewData.prNumber,
+          deliveryId,
+        });
+      })
+    );
 
-    // Log processing time
+    // Log webhook response time (should be <50ms)
     const processingTime = Date.now() - startTime;
-    console.log(`Webhook processed in ${processingTime}ms`, {
-      repository: message.repository,
-      pr: message.prNumber,
-      action: message.action,
+    console.log(`Webhook responded in ${processingTime}ms`, {
+      repository: reviewData.repository,
+      pr: reviewData.prNumber,
+      action: reviewData.action,
       deliveryId,
     });
 
     return c.json(
       {
-        message: 'Review queued',
+        message: 'Review processing started',
         deliveryId,
         processingTime,
       },
@@ -104,3 +116,4 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
     return c.json({ error: 'Internal server error' }, 500);
   }
 }
+

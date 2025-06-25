@@ -41,6 +41,19 @@ c.executionCtx.waitUntil(
 return response;
 ```
 
+### Logging Pattern
+```typescript
+// Structured logging for better observability
+console.log(JSON.stringify({
+  level: 'INFO',
+  event: 'webhook_received',
+  repository: payload.repository.full_name,
+  timestamp: new Date().toISOString()
+}));
+
+// View with: wrangler tail --format pretty
+```
+
 ### Retry Logic
 ```typescript
 // Simple retry with exponential backoff
@@ -58,9 +71,9 @@ for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 ```
 
 ### Error Handling
-- Failed reviews are logged to KV with 24-hour TTL
-- Optional admin endpoint to view/retry failed reviews
-- Simple failure rate tracking for monitoring
+- Failed reviews are logged via console.log() for observability
+- View logs using `wrangler tail` command
+- Optional in-memory tracking of recent errors for health checks
 
 ## Benefits
 

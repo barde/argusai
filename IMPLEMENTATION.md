@@ -29,17 +29,21 @@ argusai/
 ├── src/
 │   ├── index.ts              # Main worker entry point
 │   ├── handlers/
-│   │   ├── webhook.ts        # GitHub webhook handler
+│   │   ├── webhook.ts        # GitHub webhook handler with async processing
 │   │   ├── health.ts         # Health check endpoint
 │   │   └── config.ts         # Configuration management
 │   ├── services/             # (To be implemented)
+│   │   ├── review.ts         # Review processing logic
+│   │   ├── github.ts         # GitHub API client
+│   │   └── llm.ts            # GitHub Models integration
 │   ├── types/
 │   │   ├── env.ts           # Environment type definitions
 │   │   └── github.ts        # GitHub-related types
 │   └── utils/
 │       ├── crypto.ts        # Webhook signature validation
 │       ├── deduplication.ts # Event deduplication
-│       └── rateLimit.ts     # Rate limiting
+│       ├── rateLimit.ts     # Rate limiting
+│       └── logger.ts        # Simple logging utility
 ├── tests/
 │   └── handlers/
 │       └── webhook.test.ts  # Webhook handler tests
@@ -61,10 +65,10 @@ argusai/
 ## Next Steps
 
 ### Phase 2: Core Implementation
-1. **Queue Consumer** (Issue #6)
-   - Implement message processing
-   - Add error handling and retries
-   - Create dead letter queue handling
+1. **Async Review Processing** (Free Tier)
+   - Implement event.waitUntil() pattern
+   - Add early response to webhook
+   - Create review processing service
 
 2. **GitHub Models Integration** (Issue #7)
    - Create LLM service
@@ -96,6 +100,9 @@ npm install
 # Local development
 npm run dev
 
+# View logs during development
+wrangler tail
+
 # Run tests
 npm test
 
@@ -120,12 +127,7 @@ Before running the application, you need to:
    wrangler kv:namespace create "CONFIG"
    ```
 
-2. Create the queue:
-   ```bash
-   wrangler queues create argusai-reviews
-   ```
-
-3. Set secrets:
+2. Set secrets:
    ```bash
    wrangler secret put GITHUB_APP_PRIVATE_KEY
    wrangler secret put GITHUB_WEBHOOK_SECRET
@@ -153,6 +155,7 @@ npm run test:coverage # With coverage
 - ✅ Configuration management API
 - ✅ TypeScript types and interfaces
 - ✅ Test framework setup
-- ⏳ Queue consumer (next priority)
+- ⏳ Async review processing (using event.waitUntil)
 - ⏳ GitHub Models integration
 - ⏳ Comment posting logic
+- ⏳ Simple logging system

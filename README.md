@@ -13,6 +13,7 @@ Intelligent GitHub code review bot powered by LLMs, deployed on Cloudflare Worke
 - **Global Edge** - Deployed across 300+ cities via Cloudflare Workers
 - **Smart Caching** - Intelligent review caching to minimize API calls
 - **Zero Infrastructure** - No servers to manage, scales automatically
+- **Free Tier Optimized** - Runs completely free for most teams
 
 ## 📚 Documentation
 
@@ -50,14 +51,16 @@ Install the ArgusAI app on your repositories and watch it review PRs instantly!
 - **Runtime**: Cloudflare Workers (V8 Isolates)
 - **Language**: TypeScript
 - **LLM**: GitHub Models API (free tier)
-- **Queue**: Cloudflare Queues
+- **Processing**: event.waitUntil() for async tasks
 - **Storage**: Workers KV
+- **Logging**: Console logs with wrangler tail
 
 ## 💰 Cost
 
-- **Free tier**: Most teams run completely free
-- **Paid tier**: ~$2/month for 1000+ PRs/day
-- **No LLM API costs**: Uses GitHub Models free tier
+- **Workers**: 100,000 requests/day free
+- **KV**: 100,000 reads/day, 1,000 writes/day free
+- **GitHub Models**: Completely free
+- **Total**: $0 for most teams
 
 ## 🤝 Contributing
 

@@ -199,8 +199,8 @@ wrangler deploy --env development
 ```
 
 2. Test with real GitHub webhooks
-3. Monitor logs for errors
-4. Check KV for any failed reviews
+3. Monitor logs for errors with `wrangler tail`
+4. Check logs for any failed reviews using `wrangler tail --search "ERROR"`
 
 ## Phase 6: Production Deployment
 
@@ -212,9 +212,9 @@ wrangler deploy --env development
 
 2. **Monitor metrics**:
    - Response times (should be <50ms)
-   - Error rates
-   - Failed review count in KV
-   - Rate limit usage
+   - Error rates via `wrangler tail --search "ERROR"`
+   - Failed review logs via `wrangler tail --search "review_failure"`
+   - Rate limit logs via `wrangler tail --search "rate_limit"`
 
 ### 6.2 Final Cutover
 
@@ -250,8 +250,8 @@ If issues arise:
 
 - **Webhook response times**: Should be <50ms
 - **Background processing success rate**: Target >99%
-- **Failed reviews in KV**: Should be minimal
-- **Error rates**: Compare to baseline
+- **Failed reviews in logs**: Monitor with `wrangler tail`
+- **Error rates**: Compare to baseline using log analysis
 
 ### Alerting
 

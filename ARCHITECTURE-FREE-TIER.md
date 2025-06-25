@@ -96,12 +96,13 @@ async function processReviewWithRetry(env: Env, payload: any) {
   
   // All attempts failed
   console.error('All processing attempts failed:', lastError);
-  // Log to KV for manual review if needed
-  await env.CACHE.put(
-    `failed:${payload.repository.full_name}:${payload.pull_request.number}`,
-    JSON.stringify({ payload, error: lastError.message, timestamp: Date.now() }),
-    { expirationTtl: 86400 } // 24 hours
-  );
+  console.error('Failed review details:', {
+    repository: payload.repository.full_name,
+    pr: payload.pull_request.number,
+    error: lastError.message,
+    timestamp: new Date().toISOString()
+  });
+  // Note: View logs with `wrangler tail`
 }
 ```
 
@@ -169,58 +170,71 @@ export async function processReviewAsync(env: Env, payload: any) {
 
 ### 3. Simple Error Handling and Monitoring
 
-When processing fails after retries, we log to KV for monitoring:
+When processing fails after retries, we use console logging for observability:
 
 ```typescript
 // src/services/error-tracking.ts
-export async function logFailedReview(
-  env: Env,
+export function logFailedReview(
   payload: any,
   error: Error
-): Promise<void> {
-  const key = `failed:${payload.repository.full_name}:${payload.pull_request.number}`;
-  
-  await env.CACHE.put(
-    key,
-    JSON.stringify({
-      payload,
-      error: {
-        message: error.message,
-        stack: error.stack,
-      },
-      timestamp: Date.now(),
-      retries: 3,
-    }),
-    { expirationTtl: 86400 } // 24 hours
-  );
-  
-  // Increment failure counter for monitoring
-  const dailyKey = `failures:${new Date().toISOString().split('T')[0]}`;
-  const count = await env.CACHE.get(dailyKey);
-  await env.CACHE.put(
-    dailyKey,
-    String(parseInt(count || '0') + 1),
-    { expirationTtl: 172800 } // 48 hours
-  );
+): void {
+  // Log structured error data for monitoring
+  console.error('Review processing failed', {
+    type: 'review_failure',
+    repository: payload.repository.full_name,
+    pr_number: payload.pull_request.number,
+    error: {
+      message: error.message,
+      stack: error.stack,
+    },
+    timestamp: new Date().toISOString(),
+    retries_attempted: 3,
+  });
 }
 
-// Optional: Add endpoint to check failed reviews
-export async function getFailedReviews(
-  env: Env,
-  limit = 10
-): Promise<any[]> {
-  const keys = await env.CACHE.list({ prefix: 'failed:' });
-  const failed = [];
+// View logs using:
+// wrangler tail --format pretty
+// wrangler tail --search "review_failure"
+```
+
+### Logging Best Practices
+
+```typescript
+// src/utils/logger.ts
+export class Logger {
+  constructor(private context: string) {}
   
-  for (const key of keys.keys.slice(0, limit)) {
-    const data = await env.CACHE.get(key.name);
-    if (data) {
-      failed.push(JSON.parse(data));
-    }
+  info(message: string, data?: any) {
+    console.log(JSON.stringify({
+      level: 'INFO',
+      context: this.context,
+      message,
+      ...data,
+      timestamp: new Date().toISOString()
+    }));
   }
   
-  return failed;
+  error(message: string, error?: Error, data?: any) {
+    console.error(JSON.stringify({
+      level: 'ERROR',
+      context: this.context,
+      message,
+      error: error ? {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      } : undefined,
+      ...data,
+      timestamp: new Date().toISOString()
+    }));
+  }
 }
+
+// Usage:
+const logger = new Logger('webhook-handler');
+logger.info('Processing webhook', { 
+  repository: payload.repository.full_name 
+});
 ```
 
 ## Error Handling and Retry Strategy
@@ -353,81 +367,78 @@ id = "your-config-id"
 # - GITHUB_TOKEN
 ```
 
-### Optional: Manual Retry Endpoint
+### Optional: Health Check with Recent Errors
 
-For failed reviews, you can add an admin endpoint to manually retry:
+For monitoring, you can track recent errors in memory:
 
 ```typescript
-// src/handlers/admin.ts
-export async function retryFailedReview(
+// src/handlers/health.ts
+// Track recent errors in global scope (reset on Worker restart)
+const recentErrors: Array<{ timestamp: number; error: string }> = [];
+const MAX_ERRORS = 100;
+
+export function trackError(error: string) {
+  recentErrors.push({ timestamp: Date.now(), error });
+  if (recentErrors.length > MAX_ERRORS) {
+    recentErrors.shift();
+  }
+}
+
+export async function healthHandler(
   c: Context<{ Bindings: Env }>
 ): Promise<Response> {
-  const { repository, prNumber } = await c.req.json();
-  const key = `failed:${repository}:${prNumber}`;
+  const now = Date.now();
+  const oneHourAgo = now - 3600000;
   
-  const failedData = await c.env.CACHE.get(key);
-  if (!failedData) {
-    return c.json({ error: 'Failed review not found' }, 404);
-  }
+  const recentErrorCount = recentErrors.filter(
+    e => e.timestamp > oneHourAgo
+  ).length;
   
-  const { payload } = JSON.parse(failedData);
-  
-  // Retry processing
-  c.executionCtx.waitUntil(
-    processReviewWithRetry(c.env, payload)
-  );
-  
-  // Clean up failed record
-  await c.env.CACHE.delete(key);
-  
-  return c.json({ message: 'Retry initiated' });
+  return c.json({
+    status: recentErrorCount < 10 ? 'healthy' : 'degraded',
+    recent_errors_1h: recentErrorCount,
+    worker_version: c.env.WORKER_VERSION || 'unknown',
+    timestamp: new Date().toISOString()
+  });
 }
 ```
 
 ## Rate Limiting Strategy
 
-### KV-Based Sliding Window
+### Simple Rate Limiting with Timestamps
 
 ```typescript
-// src/utils/kv-rate-limit.ts
+// src/utils/rate-limit.ts
 export async function checkRateLimit(
   kv: KVNamespace,
   key: string,
   limit: number,
-  windowMs: number
+  windowMinutes: number
 ): Promise<boolean> {
-  const now = Date.now();
-  const windowStart = now - windowMs;
+  // Use minute-based keys to avoid KV write limits
+  const currentMinute = Math.floor(Date.now() / 60000);
+  const windowKey = `rate:${key}:${currentMinute}`;
   
-  // Get all entries for this key
-  const prefix = `rl:${key}:`;
-  const entries = await kv.list({ prefix });
+  // Get current minute's count
+  const count = await kv.get(windowKey);
+  const currentCount = parseInt(count || '0');
   
-  // Count recent requests
-  let recentCount = 0;
-  const expiredKeys: string[] = [];
-  
-  for (const entry of entries.keys) {
-    const timestamp = parseInt(entry.name.split(':').pop() || '0');
-    
-    if (timestamp > windowStart) {
-      recentCount++;
-    } else {
-      expiredKeys.push(entry.name);
-    }
-  }
-  
-  // Clean up expired entries
-  await Promise.all(expiredKeys.map(k => kv.delete(k)));
-  
-  if (recentCount >= limit) {
+  if (currentCount >= limit) {
+    console.warn('Rate limit exceeded', {
+      key,
+      limit,
+      currentCount,
+      minute: currentMinute
+    });
     return false;
   }
   
-  // Add current request
-  await kv.put(`${prefix}${now}`, '1', {
-    expirationTtl: Math.ceil(windowMs / 1000)
-  });
+  // Increment counter
+  await kv.put(
+    windowKey,
+    String(currentCount + 1),
+    { expirationTtl: windowMinutes * 60 }
+  );
   
   return true;
 }
@@ -435,42 +446,46 @@ export async function checkRateLimit(
 
 ## Monitoring and Observability
 
-### Health Check Endpoint
+### Monitoring with Wrangler Tail
+
+```bash
+# View real-time logs
+wrangler tail
+
+# Filter for errors only
+wrangler tail --search "ERROR"
+
+# Filter for specific repository
+wrangler tail --search "owner/repo"
+
+# Pretty format for better readability
+wrangler tail --format pretty
+
+# Save logs to file
+wrangler tail > logs.txt
+```
+
+### Optional R2 for Log Archival
+
+For long-term log storage (optional, requires R2 on free tier):
 
 ```typescript
-// src/handlers/health-free.ts
-export async function healthHandler(c: Context<{ Bindings: Env }>) {
-  const checks = {
-    worker: 'ok',
-    kv: 'unknown',
-    github: 'unknown',
-    failureRate: 'unknown',
-  };
-
-  // Check KV
-  try {
-    await c.env.CACHE.get('health:check');
-    checks.kv = 'ok';
-  } catch (error) {
-    checks.kv = 'error';
-  }
-
-  // Check failure rate
-  try {
-    const dailyKey = `failures:${new Date().toISOString().split('T')[0]}`;
-    const failures = await c.env.CACHE.get(dailyKey);
-    checks.failureRate = parseInt(failures || '0') < 10 ? 'ok' : 'warning';
-  } catch (error) {
-    checks.failureRate = 'error';
-  }
-
-  const allHealthy = Object.values(checks).every(v => v === 'ok');
+// src/utils/log-archiver.ts
+export async function archiveLogs(
+  r2: R2Bucket,
+  logs: any[]
+): Promise<void> {
+  const date = new Date().toISOString().split('T')[0];
+  const hour = new Date().getHours();
+  const key = `logs/${date}/hour-${hour}.jsonl`;
   
-  return c.json({
-    status: allHealthy ? 'healthy' : 'degraded',
-    checks,
-    timestamp: new Date().toISOString(),
-  }, allHealthy ? 200 : 503);
+  const content = logs.map(log => JSON.stringify(log)).join('\n');
+  
+  await r2.put(key, content, {
+    httpMetadata: {
+      contentType: 'application/x-ndjson'
+    }
+  });
 }
 ```
 
@@ -482,8 +497,8 @@ export async function healthHandler(c: Context<{ Bindings: Env }>) {
 3. Test webhook signature validation
 
 ### Phase 2: Error Handling
-1. Implement KV-based error logging
-2. Add monitoring endpoints
+1. Implement structured console logging
+2. Set up wrangler tail for monitoring
 3. Test failure scenarios
 
 ### Phase 3: Production Deployment
@@ -516,7 +531,7 @@ export async function healthHandler(c: Context<{ Bindings: Env }>) {
 
 ### Limitation 2: KV Write Limits
 - **Issue**: 1 write/second per key
-- **Mitigation**: Use timestamp-based keys for distribution
+- **Mitigation**: Use minute-based keys for rate limiting, console.log() for logging
 
 ### Limitation 3: No Queue Guarantees
 - **Issue**: Potential processing failures

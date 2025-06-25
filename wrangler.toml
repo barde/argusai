@@ -49,32 +49,14 @@ id = "06264102637f40a6a366b0cf6b45b2d5"
 binding = "CONFIG"
 id = "f28a375dc99b45c8905e0d7016544a13"
 
-# Queue Configuration
-[[env.production.queues.producers]]
-binding = "REVIEW_QUEUE"
-queue = "argusai-reviews"
+# Free Tier: No queues needed
+# Processing happens directly in webhook handler using event.waitUntil()
 
-[[env.production.queues.consumers]]
-queue = "argusai-reviews"
-max_batch_size = 10
-max_batch_timeout = 30
-max_retries = 3
-dead_letter_queue = "argusai-reviews-dlq"
-
-[[env.development.queues.producers]]
-binding = "REVIEW_QUEUE"
-queue = "argusai-reviews-dev"
-
-[[env.development.queues.consumers]]
-queue = "argusai-reviews-dev"
-max_batch_size = 5
-max_batch_timeout = 30
-max_retries = 2
-
-# R2 bucket for storing large diffs (optional)
+# R2 bucket for batch log storage (optional)
+# Free tier: Use console.log() and wrangler tail for logging
 # [[r2_buckets]]
-# binding = "DIFF_STORAGE"
-# bucket_name = "argusai-diffs"
+# binding = "LOG_STORAGE"
+# bucket_name = "argusai-logs"
 
 # Service bindings (if using separate workers)
 # [[services]]

@@ -32,3 +32,6 @@ When this PR is created, ArgusAI should:
 5. Confirm that positive feedback is given for the well-structured UserService class
 
 This test validates that the ArgusAI bot is fully functional and ready for production use.
+
+## Update: Webhook URL Fixed
+The webhook URL has been corrected and the runtime error has been fixed. The bot should now process this PR correctly.

@@ -14,10 +14,6 @@ GitHub Webhook → Worker → Cloudflare Queue → Consumer → LLM → GitHub A
 ### New Free Tier Architecture
 ```
 GitHub Webhook → Worker (early response) → Background Processing → LLM → GitHub API
-                                         ↓
-                                    Upstash Redis (backup queue)
-                                         ↓
-                                    GitHub Actions (fallback)
 ```
 
 ## Core Components
@@ -68,7 +64,7 @@ export async function webhookHandlerFree(c: Context<{ Bindings: Env }>) {
 
     // Process in background using waitUntil
     c.executionCtx.waitUntil(
-      processReviewWithFallback(c.env, payload)
+      processReviewWithRetry(c.env, payload)
     );
 
     return response;
@@ -78,23 +74,34 @@ export async function webhookHandlerFree(c: Context<{ Bindings: Env }>) {
   }
 }
 
-async function processReviewWithFallback(env: Env, payload: any) {
-  try {
-    // Primary: Direct processing
-    await processReviewAsync(env, payload);
-  } catch (error) {
-    console.error('Primary processing failed:', error);
-    
-    // Fallback 1: Queue to Upstash Redis
+async function processReviewWithRetry(env: Env, payload: any) {
+  const maxAttempts = 3;
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      await queueToUpstash(env, payload);
-    } catch (upstashError) {
-      console.error('Upstash fallback failed:', upstashError);
+      await processReviewAsync(env, payload);
+      return; // Success
+    } catch (error) {
+      lastError = error;
+      console.error(`Processing attempt ${attempt} failed:`, error);
       
-      // Fallback 2: Trigger GitHub Action
-      await triggerGitHubAction(env, payload);
+      if (attempt < maxAttempts) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
   }
+  
+  // All attempts failed
+  console.error('All processing attempts failed:', lastError);
+  // Log to KV for manual review if needed
+  await env.CACHE.put(
+    `failed:${payload.repository.full_name}:${payload.pull_request.number}`,
+    JSON.stringify({ payload, error: lastError.message, timestamp: Date.now() }),
+    { expirationTtl: 86400 } // 24 hours
+  );
 }
 ```
 
@@ -160,134 +167,60 @@ export async function processReviewAsync(env: Env, payload: any) {
 }
 ```
 
-### 3. Upstash Redis Integration (Free Backup Queue)
+### 3. Simple Error Handling and Monitoring
 
-When direct processing fails, we queue to Upstash Redis:
-
-```typescript
-// src/services/upstash-queue.ts
-import { Redis } from '@upstash/redis/cloudflare';
-
-export async function queueToUpstash(env: Env, payload: any) {
-  const redis = new Redis({
-    url: env.UPSTASH_REDIS_URL,
-    token: env.UPSTASH_REDIS_TOKEN,
-  });
-
-  const queueItem = {
-    id: crypto.randomUUID(),
-    payload,
-    timestamp: Date.now(),
-    attempts: 0,
-    maxAttempts: 3,
-  };
-
-  // Add to queue using Redis list
-  await redis.lpush('argusai:queue', JSON.stringify(queueItem));
-  
-  // Set processing flag with TTL to prevent duplicates
-  await redis.setex(
-    `argusai:processing:${payload.pull_request.id}`, 
-    300, // 5 minute TTL
-    '1'
-  );
-}
-
-// Separate worker or scheduled handler to process queue
-export async function processUpstashQueue(env: Env) {
-  const redis = new Redis({
-    url: env.UPSTASH_REDIS_URL,
-    token: env.UPSTASH_REDIS_TOKEN,
-  });
-
-  // Process up to 10 items
-  for (let i = 0; i < 10; i++) {
-    const item = await redis.rpop('argusai:queue');
-    if (!item) break;
-
-    const queueItem = JSON.parse(item as string);
-    
-    try {
-      await processReviewAsync(env, queueItem.payload);
-    } catch (error) {
-      queueItem.attempts++;
-      
-      if (queueItem.attempts < queueItem.maxAttempts) {
-        // Requeue with exponential backoff
-        await redis.lpush('argusai:queue:delayed', JSON.stringify({
-          ...queueItem,
-          processAfter: Date.now() + (Math.pow(2, queueItem.attempts) * 1000)
-        }));
-      } else {
-        // Move to dead letter queue
-        await redis.lpush('argusai:queue:dlq', JSON.stringify(queueItem));
-      }
-    }
-  }
-}
-```
-
-### 4. GitHub Actions Fallback
-
-As a last resort, we can trigger GitHub Actions:
+When processing fails after retries, we log to KV for monitoring:
 
 ```typescript
-// src/services/github-action-fallback.ts
-export async function triggerGitHubAction(env: Env, payload: any) {
-  const { repository, pull_request } = payload;
+// src/services/error-tracking.ts
+export async function logFailedReview(
+  env: Env,
+  payload: any,
+  error: Error
+): Promise<void> {
+  const key = `failed:${payload.repository.full_name}:${payload.pull_request.number}`;
   
-  const response = await fetch(
-    `https://api.github.com/repos/${repository.full_name}/dispatches`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `token ${env.GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json',
+  await env.CACHE.put(
+    key,
+    JSON.stringify({
+      payload,
+      error: {
+        message: error.message,
+        stack: error.stack,
       },
-      body: JSON.stringify({
-        event_type: 'process-argusai-review',
-        client_payload: {
-          pr_number: pull_request.number,
-          sha: pull_request.head.sha,
-          installation_id: payload.installation.id,
-          timestamp: Date.now(),
-        }
-      })
-    }
+      timestamp: Date.now(),
+      retries: 3,
+    }),
+    { expirationTtl: 86400 } // 24 hours
   );
-
-  if (!response.ok) {
-    throw new Error(`GitHub dispatch failed: ${response.status}`);
-  }
+  
+  // Increment failure counter for monitoring
+  const dailyKey = `failures:${new Date().toISOString().split('T')[0]}`;
+  const count = await env.CACHE.get(dailyKey);
+  await env.CACHE.put(
+    dailyKey,
+    String(parseInt(count || '0') + 1),
+    { expirationTtl: 172800 } // 48 hours
+  );
 }
-```
 
-### 5. Scheduled Queue Processor
-
-A scheduled worker processes any queued items:
-
-```typescript
-// src/scheduled.ts
-export default {
-  async scheduled(
-    controller: ScheduledController,
-    env: Env,
-    ctx: ExecutionContext
-  ): Promise<void> {
-    switch (controller.cron) {
-      case '* * * * *': // Every minute
-        await processUpstashQueue(env);
-        break;
-      case '*/5 * * * *': // Every 5 minutes
-        await processDelayedQueue(env);
-        break;
-      case '0 * * * *': // Every hour
-        await cleanupExpiredData(env);
-        break;
+// Optional: Add endpoint to check failed reviews
+export async function getFailedReviews(
+  env: Env,
+  limit = 10
+): Promise<any[]> {
+  const keys = await env.CACHE.list({ prefix: 'failed:' });
+  const failed = [];
+  
+  for (const key of keys.keys.slice(0, limit)) {
+    const data = await env.CACHE.get(key.name);
+    if (data) {
+      failed.push(JSON.parse(data));
     }
-  },
-};
+  }
+  
+  return failed;
+}
 ```
 
 ## Error Handling and Retry Strategy
@@ -394,17 +327,12 @@ main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Scheduled handlers for queue processing
-[triggers]
-crons = ["* * * * *", "*/5 * * * *", "0 * * * *"]
-
 # Environment variables
 [vars]
 ENVIRONMENT = "production"
 GITHUB_APP_ID = "your-app-id"
 GITHUB_MODEL = "gpt-4o-mini"
 LOG_LEVEL = "info"
-UPSTASH_REDIS_URL = "https://your-instance.upstash.io"
 
 # KV Namespaces (same as before)
 [[kv_namespaces]]
@@ -419,49 +347,41 @@ id = "your-rate-limits-id"
 binding = "CONFIG"
 id = "your-config-id"
 
-# KV for queue state management
-[[kv_namespaces]]
-binding = "QUEUE_STATE"
-id = "your-queue-state-id"
-
 # Secrets
 # - GITHUB_APP_PRIVATE_KEY
 # - GITHUB_WEBHOOK_SECRET
 # - GITHUB_TOKEN
-# - UPSTASH_REDIS_TOKEN
 ```
 
-### GitHub Actions Workflow (Fallback Processor)
+### Optional: Manual Retry Endpoint
 
-```yaml
-# .github/workflows/argusai-processor.yml
-name: ArgusAI Review Processor
+For failed reviews, you can add an admin endpoint to manually retry:
 
-on:
-  repository_dispatch:
-    types: [process-argusai-review]
-
-jobs:
-  process-review:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Process PR Review
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          # Install dependencies
-          npm ci --only=production
-          
-          # Run review processor
-          node scripts/process-review.js \
-            --pr "${{ github.event.client_payload.pr_number }}" \
-            --sha "${{ github.event.client_payload.sha }}" \
-            --repo "${{ github.repository }}"
+```typescript
+// src/handlers/admin.ts
+export async function retryFailedReview(
+  c: Context<{ Bindings: Env }>
+): Promise<Response> {
+  const { repository, prNumber } = await c.req.json();
+  const key = `failed:${repository}:${prNumber}`;
+  
+  const failedData = await c.env.CACHE.get(key);
+  if (!failedData) {
+    return c.json({ error: 'Failed review not found' }, 404);
+  }
+  
+  const { payload } = JSON.parse(failedData);
+  
+  // Retry processing
+  c.executionCtx.waitUntil(
+    processReviewWithRetry(c.env, payload)
+  );
+  
+  // Clean up failed record
+  await c.env.CACHE.delete(key);
+  
+  return c.json({ message: 'Retry initiated' });
+}
 ```
 
 ## Rate Limiting Strategy
@@ -523,8 +443,8 @@ export async function healthHandler(c: Context<{ Bindings: Env }>) {
   const checks = {
     worker: 'ok',
     kv: 'unknown',
-    upstash: 'unknown',
     github: 'unknown',
+    failureRate: 'unknown',
   };
 
   // Check KV
@@ -535,16 +455,13 @@ export async function healthHandler(c: Context<{ Bindings: Env }>) {
     checks.kv = 'error';
   }
 
-  // Check Upstash
+  // Check failure rate
   try {
-    const redis = new Redis({
-      url: c.env.UPSTASH_REDIS_URL,
-      token: c.env.UPSTASH_REDIS_TOKEN,
-    });
-    await redis.ping();
-    checks.upstash = 'ok';
+    const dailyKey = `failures:${new Date().toISOString().split('T')[0]}`;
+    const failures = await c.env.CACHE.get(dailyKey);
+    checks.failureRate = parseInt(failures || '0') < 10 ? 'ok' : 'warning';
   } catch (error) {
-    checks.upstash = 'error';
+    checks.failureRate = 'error';
   }
 
   const allHealthy = Object.values(checks).every(v => v === 'ok');
@@ -557,35 +474,28 @@ export async function healthHandler(c: Context<{ Bindings: Env }>) {
 }
 ```
 
-## Migration Path
+## Deployment Steps
 
-### Phase 1: Webhook Handler Update
-1. Implement early response pattern
-2. Add `waitUntil()` processing
-3. Test with small percentage of traffic
+### Phase 1: Webhook Handler Implementation
+1. Implement early response pattern with `waitUntil()`
+2. Add retry logic with exponential backoff
+3. Test webhook signature validation
 
-### Phase 2: Add Upstash Integration
-1. Set up Upstash Redis account (free tier)
-2. Implement queue operations
-3. Add scheduled queue processor
+### Phase 2: Error Handling
+1. Implement KV-based error logging
+2. Add monitoring endpoints
+3. Test failure scenarios
 
-### Phase 3: GitHub Actions Fallback
-1. Create workflow file
-2. Implement dispatch logic
-3. Test failover scenarios
-
-### Phase 4: Remove Queue Dependencies
+### Phase 3: Production Deployment
 1. Update wrangler.toml
-2. Remove queue consumer code
-3. Deploy to production
+2. Deploy to production
+3. Monitor error rates
 
 ## Cost Analysis
 
 ### Monthly Costs (10,000 PR reviews)
 - **Cloudflare Workers**: $0 (100k requests/day free)
 - **Cloudflare KV**: $0 (100k reads, 1k writes/day free)
-- **Upstash Redis**: $0 (10k commands/day free)
-- **GitHub Actions**: $0 (public repos unlimited)
 - **GitHub Models API**: $0 (free tier)
 
 **Total: $0/month**
@@ -593,10 +503,10 @@ export async function healthHandler(c: Context<{ Bindings: Env }>) {
 ## Advantages of This Architecture
 
 1. **Zero Cost**: Operates entirely on free tiers
-2. **High Reliability**: Multiple fallback mechanisms
+2. **Simplicity**: No external dependencies or queue infrastructure
 3. **Low Latency**: Early response pattern prevents timeouts
-4. **Scalable**: Can handle bursts with queuing
-5. **Simple Operations**: No queue infrastructure to manage
+4. **Direct Processing**: Immediate feedback on PRs
+5. **Easy Debugging**: All logic in one place
 
 ## Limitations and Mitigations
 
@@ -608,16 +518,12 @@ export async function healthHandler(c: Context<{ Bindings: Env }>) {
 - **Issue**: 1 write/second per key
 - **Mitigation**: Use timestamp-based keys for distribution
 
-### Limitation 3: No Built-in Queue Guarantees
-- **Issue**: Potential message loss
-- **Mitigation**: Multiple fallback layers + idempotency
-
-### Limitation 4: Scheduled Worker Limits
-- **Issue**: Cron triggers have minimum 1-minute interval
-- **Mitigation**: Process multiple items per execution
+### Limitation 3: No Queue Guarantees
+- **Issue**: Potential processing failures
+- **Mitigation**: Retry logic + error logging for manual intervention
 
 ## Conclusion
 
-This architecture provides a robust, cost-effective solution for ArgusAI that operates entirely on free tiers. The combination of early response patterns, background processing, and multiple fallback mechanisms ensures reliability without the need for paid queue services.
+This architecture provides a simple, cost-effective solution for ArgusAI that operates entirely on free tiers. The combination of early response patterns and background processing with retry logic ensures reliability without the need for paid queue services or external dependencies.
 
-The design prioritizes simplicity and maintainability while providing clear upgrade paths if the project scales beyond free tier limits in the future.
+The design prioritizes simplicity and maintainability. If the project scales beyond free tier limits, you can easily add Cloudflare Queues or other queueing solutions without major architectural changes.

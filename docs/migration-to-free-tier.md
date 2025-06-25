@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide walks through migrating ArgusAI from the original Cloudflare Queue-based architecture to the new free tier architecture that uses `event.waitUntil()` and alternative queue services.
+This guide walks through migrating ArgusAI from the original Cloudflare Queue-based architecture to the new free tier architecture that uses only `event.waitUntil()` for background processing.
 
 ## Migration Benefits
 
@@ -14,7 +14,6 @@ This guide walks through migrating ArgusAI from the original Cloudflare Queue-ba
 ## Pre-Migration Checklist
 
 - [ ] Backup current configuration
-- [ ] Set up Upstash Redis account (free tier)
 - [ ] Configure GitHub token with necessary permissions
 - [ ] Review current queue consumer logic
 - [ ] Plan migration window (minimal downtime)
@@ -23,15 +22,7 @@ This guide walks through migrating ArgusAI from the original Cloudflare Queue-ba
 
 ### 1.1 Update Environment Variables
 
-Add new environment variables to `wrangler.toml`:
-
-```toml
-[vars]
-UPSTASH_REDIS_URL = "your-upstash-url"
-UPSTASH_REDIS_TOKEN = "your-upstash-token"
-GITHUB_ACTIONS_TRIGGER_TOKEN = "your-github-pat"
-ENABLE_QUEUE_FREE_MODE = "true"
-```
+No new environment variables needed for the simplified architecture.
 
 ### 1.2 Remove Queue Configuration
 
@@ -43,14 +34,9 @@ Comment out or remove queue configurations:
 # [[queues.consumers]]
 ```
 
-### 1.3 Add Scheduled Workers
+### 1.3 Remove Scheduled Workers
 
-Add cron triggers for processing queued items:
-
-```toml
-[triggers]
-crons = ["*/5 * * * *"]  # Process queue every 5 minutes
-```
+No scheduled workers needed in the simplified architecture.
 
 ## Phase 2: Update Webhook Handler
 
@@ -86,47 +72,49 @@ export async function handleWebhook(c: Context): Promise<Response> {
   
   // Process in background
   c.executionCtx.waitUntil(
-    processReviewWithFallback(c.env, payload)
+    processReviewWithRetry(c.env, payload)
   );
   
   return response;
 }
 ```
 
-### 2.2 Implement Fallback Processor
+### 2.2 Implement Simple Retry Logic
 
-Create `src/services/fallback-processor.ts`:
+Create `src/services/retry-processor.ts`:
 
 ```typescript
-export async function processReviewWithFallback(
+export async function processReviewWithRetry(
   env: Env,
   payload: WebhookPayload
 ): Promise<void> {
-  const review = {
-    repository: payload.repository.full_name,
-    prNumber: payload.pull_request.number,
-    installationId: payload.installation.id,
-    action: payload.action,
-    timestamp: Date.now(),
-    retryCount: 0
-  };
+  const maxAttempts = 3;
+  let lastError;
 
-  try {
-    // Try direct processing
-    await processReview(env, review);
-  } catch (error) {
-    console.error('Direct processing failed:', error);
-    
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      // Fallback to Upstash
-      await queueToUpstash(env, review);
-    } catch (upstashError) {
-      console.error('Upstash queueing failed:', upstashError);
+      await processReview(env, {
+        repository: payload.repository.full_name,
+        prNumber: payload.pull_request.number,
+        installationId: payload.installation.id,
+        action: payload.action,
+        timestamp: Date.now()
+      });
+      return; // Success
+    } catch (error) {
+      lastError = error;
+      console.error(`Attempt ${attempt} failed:`, error);
       
-      // Final fallback to GitHub Actions
-      await triggerGitHubAction(env, review);
+      if (attempt < maxAttempts) {
+        // Exponential backoff
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
   }
+
+  // Log failure for monitoring
+  await logFailedReview(env, payload, lastError);
 }
 ```
 
@@ -143,59 +131,51 @@ Delete or comment out the `queue` handler in `src/index.ts`:
 // }
 ```
 
-### 3.2 Add Scheduled Handler
+### 3.2 Add Error Monitoring (Optional)
 
-Add scheduled handler for processing queued items:
-
-```typescript
-// src/index.ts
-async scheduled(
-  controller: ScheduledController,
-  env: Env,
-  ctx: ExecutionContext
-): Promise<void> {
-  await processQueuedReviews(env, ctx);
-}
-```
-
-### 3.3 Implement Queue Processor
-
-Create `src/services/queue-processor.ts`:
+Add simple monitoring for failed reviews:
 
 ```typescript
-export async function processQueuedReviews(
+// src/services/monitoring.ts
+export async function logFailedReview(
   env: Env,
-  ctx: ExecutionContext
+  payload: WebhookPayload,
+  error: Error
 ): Promise<void> {
-  const redis = Redis.fromEnv(env);
+  const key = `failed:${payload.repository.full_name}:${payload.pull_request.number}`;
   
-  // Process up to 10 items
-  for (let i = 0; i < 10; i++) {
-    const item = await redis.lpop('review-queue');
-    if (!item) break;
-    
-    const review = JSON.parse(item);
-    
-    // Process with retry logic
-    ctx.waitUntil(
-      processWithRetry(env, review)
-    );
+  await env.CACHE.put(
+    key,
+    JSON.stringify({
+      payload,
+      error: error.message,
+      timestamp: Date.now()
+    }),
+    { expirationTtl: 86400 } // 24 hours
+  );
+}
+
+// Optional admin endpoint to view failures
+export async function getFailedReviews(
+  env: Env
+): Promise<any[]> {
+  const keys = await env.CACHE.list({ prefix: 'failed:' });
+  const failed = [];
+  
+  for (const key of keys.keys) {
+    const data = await env.CACHE.get(key.name);
+    if (data) failed.push(JSON.parse(data));
   }
+  
+  return failed;
 }
 ```
 
 ## Phase 4: Update Dependencies
 
-### 4.1 Add New Dependencies
+### 4.1 Remove External Dependencies
 
-```bash
-npm install @upstash/redis
-npm install @octokit/action
-```
-
-### 4.2 Remove Queue-Related Dependencies
-
-Remove any queue-specific utilities or types that are no longer needed.
+No new dependencies needed. Remove any queue-specific utilities or types that are no longer needed.
 
 ## Phase 5: Testing
 
@@ -207,8 +187,8 @@ curl -X POST http://localhost:8787/webhooks/github \
   -H "Content-Type: application/json" \
   -d @test-webhook-payload.json
 
-# Test scheduled processor
-wrangler dev --test-scheduled
+# Monitor logs
+wrangler tail
 ```
 
 ### 5.2 Staging Deployment
@@ -220,21 +200,20 @@ wrangler deploy --env development
 
 2. Test with real GitHub webhooks
 3. Monitor logs for errors
-4. Verify Upstash queue processing
+4. Check KV for any failed reviews
 
 ## Phase 6: Production Deployment
 
-### 6.1 Gradual Rollout
+### 6.1 Simple Rollout
 
-1. **Enable dual-mode operation** (if possible):
-   - Keep queue consumer running
-   - Enable new architecture in parallel
-   - Compare results
+1. **Deploy new version**:
+   - Remove queue consumer
+   - Enable waitUntil() processing
 
 2. **Monitor metrics**:
-   - Response times
+   - Response times (should be <50ms)
    - Error rates
-   - Queue depths
+   - Failed review count in KV
    - Rate limit usage
 
 ### 6.2 Final Cutover
@@ -261,10 +240,9 @@ After successful migration:
 
 If issues arise:
 
-1. Set `ENABLE_QUEUE_FREE_MODE = "false"`
-2. Re-enable queue configuration
-3. Deploy previous version
-4. Investigate issues before retry
+1. Re-enable queue configuration in wrangler.toml
+2. Deploy previous version with queue consumer
+3. Investigate issues before retry
 
 ## Monitoring Post-Migration
 
@@ -272,27 +250,21 @@ If issues arise:
 
 - **Webhook response times**: Should be <50ms
 - **Background processing success rate**: Target >99%
-- **Upstash Redis usage**: Monitor free tier limits
-- **GitHub Actions usage**: For private repos
+- **Failed reviews in KV**: Should be minimal
 - **Error rates**: Compare to baseline
 
 ### Alerting
 
 Set up alerts for:
 - High error rates
-- Upstash queue depth > threshold
-- GitHub Actions failures
+- Failed review count > threshold
 - Rate limit approaching
 
 ## Common Issues and Solutions
 
 ### Issue: Background processing timeouts
 
-**Solution**: Break large reviews into smaller chunks or use GitHub Actions for heavy processing.
-
-### Issue: Upstash connection failures
-
-**Solution**: Implement exponential backoff and fallback to GitHub Actions.
+**Solution**: Optimize review processing or break into smaller chunks.
 
 ### Issue: Rate limits hit
 
@@ -300,10 +272,10 @@ Set up alerts for:
 
 ## Migration Timeline
 
-- **Week 1**: Development environment migration
-- **Week 2**: Staging testing and monitoring
-- **Week 3**: Production gradual rollout
-- **Week 4**: Full cutover and cleanup
+- **Day 1**: Development environment testing
+- **Day 2-3**: Staging deployment and monitoring
+- **Day 4**: Production deployment
+- **Day 5**: Cleanup and optimization
 
 ## Success Criteria
 
@@ -317,6 +289,6 @@ Set up alerts for:
 
 For issues during migration:
 1. Check logs: `wrangler tail`
-2. Review error tracking
+2. Review failed reviews in KV
 3. Consult ARCHITECTURE-FREE-TIER.md
-4. Open GitHub issue if needed
+4. Add manual retry if needed

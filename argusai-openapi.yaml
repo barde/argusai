@@ -91,8 +91,8 @@ paths:
                 $ref: '#/components/schemas/WebhookResponse'
               example:
                 status: "accepted"
-                message: "Webhook queued for processing"
-                queueId: "queue-123456"
+                message: "Webhook received, processing started"
+                processingId: "proc-123456"
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -136,7 +136,7 @@ paths:
                   github_api: "operational"
                   llm_provider: "operational"
                   kv_storage: "operational"
-                  queue: "operational"
+                  processing: "operational"
         '503':
           description: Service is unhealthy
           content:
@@ -151,7 +151,7 @@ paths:
                   github_api: "operational"
                   llm_provider: "degraded"
                   kv_storage: "operational"
-                  queue: "operational"
+                  processing: "operational"
 
   /config/{repository}:
     get:
@@ -245,9 +245,9 @@ components:
         message:
           type: string
           description: Human-readable status message
-        queueId:
+        processingId:
           type: string
-          description: Queue ID for tracking the review process
+          description: Processing ID for tracking the review
 
     PullRequestEvent:
       type: object
@@ -435,7 +435,7 @@ components:
             kv_storage:
               type: string
               enum: [operational, degraded, down]
-            queue:
+            processing:
               type: string
               enum: [operational, degraded, down]
 

@@ -8,7 +8,7 @@ compatibility_flags = ["nodejs_compat"]
 name = "argusai-dev"
 [env.development.vars]
 ENVIRONMENT = "development"
-GITHUB_APP_ID = "your-dev-app-id"
+GITHUB_APP_ID = "1454778"
 GITHUB_MODEL = "gpt-4o-mini"
 LOG_LEVEL = "debug"
 
@@ -27,54 +27,36 @@ LOG_LEVEL = "info"
 # KV Namespaces (create with: wrangler kv:namespace create "NAME")
 [[env.production.kv_namespaces]]
 binding = "CACHE"
-id = "your-cache-namespace-id"
+id = "df70afec18184e6da7a50bad00cbae45"
 
 [[env.production.kv_namespaces]]
 binding = "RATE_LIMITS"
-id = "your-rate-limits-namespace-id"
+id = "3f9fae87dddd4751823a13ce49dfa81c"
 
 [[env.production.kv_namespaces]]
 binding = "CONFIG"
-id = "your-config-namespace-id"
+id = "6155db907791462998569c559e71a8cd"
 
 [[env.development.kv_namespaces]]
 binding = "CACHE"
-id = "your-dev-cache-namespace-id"
+id = "13021ce160594c9bb2582e976da7a2cc"
 
 [[env.development.kv_namespaces]]
 binding = "RATE_LIMITS"
-id = "your-dev-rate-limits-namespace-id"
+id = "06264102637f40a6a366b0cf6b45b2d5"
 
 [[env.development.kv_namespaces]]
 binding = "CONFIG"
-id = "your-dev-config-namespace-id"
+id = "f28a375dc99b45c8905e0d7016544a13"
 
-# Queue Configuration
-[[env.production.queues.producers]]
-binding = "REVIEW_QUEUE"
-queue = "argusai-reviews"
+# Free Tier: No queues needed
+# Processing happens directly in webhook handler using event.waitUntil()
 
-[[env.production.queues.consumers]]
-queue = "argusai-reviews"
-max_batch_size = 10
-max_batch_timeout = 30
-max_retries = 3
-dead_letter_queue = "argusai-reviews-dlq"
-
-[[env.development.queues.producers]]
-binding = "REVIEW_QUEUE"
-queue = "argusai-reviews-dev"
-
-[[env.development.queues.consumers]]
-queue = "argusai-reviews-dev"
-max_batch_size = 5
-max_batch_timeout = 30
-max_retries = 2
-
-# R2 bucket for storing large diffs (optional)
+# R2 bucket for batch log storage (optional)
+# Free tier: Use console.log() and wrangler tail for logging
 # [[r2_buckets]]
-# binding = "DIFF_STORAGE"
-# bucket_name = "argusai-diffs"
+# binding = "LOG_STORAGE"
+# bucket_name = "argusai-logs"
 
 # Service bindings (if using separate workers)
 # [[services]]

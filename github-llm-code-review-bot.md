@@ -83,16 +83,16 @@ GitHub Apps do not have a separate name reservation system. To secure the name "
                         │  Webhook Handler         │                │
                         │  - Signature validation  │                │
                         │  - Rate limiting         │                │
-                        │  - Queue PR for review   │                │
+                        │  - event.waitUntil()     │                │
                         │  - Return 200 instantly  │                │
                         └────────┬─────────────────┘                │
                                  │                                   │
                         ┌────────▼─────────────────┐                │
                         │                          │                │
-                        │  Cloudflare Queue        │                │
-                        │  - Async processing      │                │
-                        │  - Automatic retries     │                │
-                        │  - Dead letter queue     │                │
+                        │  Async Processing        │                │
+                        │  - No queues (free tier) │                │
+                        │  - event.waitUntil()     │                │
+                        │  - Console logging       │                │
                         └────────┬─────────────────┘                │
                                  │                                   │
                         ┌────────▼─────────────────┐                │
@@ -130,7 +130,7 @@ GitHub Apps do not have a separate name reservation system. To secure the name "
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     // Validate GitHub webhook signature
-    // Queue review task for async processing
+    // Process review asynchronously without blocking response
     // Return 200 OK immediately to GitHub
     return new Response('Webhook received', { status: 200 })
   }
@@ -138,41 +138,44 @@ export default {
 ```
 - Validates webhook signatures using Web Crypto API
 - Filters relevant events (PR opened, synchronized, etc.)
-- Queues review tasks to Cloudflare Queue for async processing
+- Uses event.waitUntil() for async processing without queues
 - Returns 200 OK immediately (<50ms) - doesn't wait for LLM
 
-#### 2. **Review Consumer (Queue Processor)**
+#### 2. **Async Review Processing (Free Tier)**
 ```typescript
-// Processes queued reviews asynchronously
-export default {
-  async queue(batch: MessageBatch<ReviewTask>, env: Env): Promise<void> {
-    for (const message of batch.messages) {
-      try {
-        // Check cache first
-        const cached = await checkCache(message.body.sha)
-        if (cached) {
-          await postCachedReview(cached)
-          message.ack()
-          continue
-        }
-        
-        // Fetch PR diff from GitHub
-        // Call LLM provider (can take 5-30 seconds)
-        // Post comments back to GitHub
-        // Cache results
-        await processReview(message.body, env)
-        message.ack()
-      } catch (error) {
-        message.retry() // Automatic exponential backoff
-      }
-    }
-  }
+// Process reviews asynchronously using event.waitUntil()
+export async function webhookHandler(request: Request, env: Env, ctx: ExecutionContext) {
+  // Validate webhook and extract PR data
+  const prData = await validateAndParse(request)
+  
+  // Return immediately to GitHub
+  const response = new Response('OK', { status: 200 })
+  
+  // Process review asynchronously without blocking
+  ctx.waitUntil(
+    processReviewAsync(prData, env).catch(error => {
+      console.error('Review processing failed:', error)
+    })
+  )
+  
+  return response
+}
+
+async function processReviewAsync(prData: PRData, env: Env) {
+  // Check cache first
+  const cached = await env.CACHE.get(`review:${prData.sha}`)
+  if (cached) return
+  
+  // Fetch PR diff from GitHub
+  // Call GitHub Models API (can take 5-30 seconds)
+  // Post comments back to GitHub
+  // Cache results (mindful of KV write limits)
 }
 ```
-- Runs independently from webhook handler
+- Uses event.waitUntil() instead of queues (free tier friendly)
 - Processes reviews without blocking webhook responses
-- Can take as long as needed for LLM calls (5-30 seconds)
-- Automatic retries on LLM provider failures
+- Can take as long as needed for LLM calls
+- Simple error handling with console.log()
 - Caches results to handle duplicate webhooks efficiently
 
 #### 3. **Why Workers KV is Essential**
@@ -204,69 +207,50 @@ export default {
 
 **No D1 Database**: Following Workers SDK best practices, we avoid persistent storage for ephemeral data. All state is temporary and reconstructible.
 
-#### 4. **Queue System (Cloudflare Queues)**
+#### 4. **Free Tier Architecture (No Queues)**
 
-According to Cloudflare's 2024 documentation[^17], Queues are the optimal choice for async LLM processing:
+**Why event.waitUntil() instead of Queues:**
+- **Zero Cost**: Queues require paid plan for production use
+- **Simplicity**: No additional infrastructure to manage
+- **Sufficient for Most Teams**: Handles hundreds of PRs/day easily
+- **Native Workers Feature**: Built into the platform
 
-**Why Cloudflare Queues over alternatives:**
-- **Native Integration**: "Cloudflare Queues integrate with Cloudflare Workers and enable you to build applications that can guarantee delivery"[^18]
-- **Zero Configuration**: No separate infrastructure needed
-- **At-least-once delivery**: "Messages are not deleted from a queue until the consumer has successfully consumed the message"[^19]
-- **Automatic retries**: With exponential backoff for failed messages
-- **Dead letter queues**: For handling persistent failures (poison messages)[^20]
-- **Cost effective**: 1M messages/month free tier
+**Free Tier Limits to Consider:**
+- **Workers**: 100,000 requests/day (plenty for most teams)
+- **KV Reads**: 100,000/day (use caching wisely)
+- **KV Writes**: 1,000/day with 1 write/second limit
+- **CPU Time**: 10ms per request (use waitUntil for longer tasks)
 
-**Alternatives considered (per 2024 best practices[^21]):**
-- **Apache Kafka**: Used by Helicone for high-volume LLM logging, but requires more operational overhead[^22]
-- **AWS SQS**: "Virtually limitless" capacity but cross-cloud complexity[^23]
-- **Redis with BullMQ**: Good for Node.js environments but not edge-native[^24]
-- **Azure Service Bus**: Enterprise-grade but higher latency from edge locations
-- **RabbitMQ**: Self-hosted overhead, not suitable for serverless
-
+**Logging Strategy:**
 ```typescript
-// Producer in webhook handler
-await env.REVIEW_QUEUE.send({
-  prNumber: pr.number,
-  repo: pr.repository.full_name,
-  action: pr.action,
-  installationId: pr.installation.id,
-  timestamp: Date.now()
-});
+// Simple logging for free tier
+const logger = {
+  info: (msg: string, data?: any) => {
+    console.log(`[INFO] ${msg}`, data ? JSON.stringify(data) : '')
+  },
+  error: (msg: string, error?: any) => {
+    console.error(`[ERROR] ${msg}`, error)
+  }
+}
 
-// Consumer configuration in wrangler.toml
-[env.production.queues]
-producers = [{ binding = "REVIEW_QUEUE", queue = "argoai-reviews" }]
-consumers = [{
-  queue = "argoai-reviews",
-  max_batch_size = 10,
-  max_batch_timeout = 30,
-  max_retries = 3,
-  dead_letter_queue = "argoai-dlq"
-}]
+// View logs with wrangler tail
+// wrangler tail --env production
+```
 
-// Consumer implementation
-export default {
-  async queue(batch: MessageBatch<ReviewTask>, env: Env): Promise<void> {
-    // Process messages in parallel for efficiency
-    await Promise.all(
-      batch.messages.map(async (message) => {
-        try {
-          await processReview(message.body, env);
-          message.ack(); // Acknowledge successful processing
-        } catch (error) {
-          console.error(`Failed to process review: ${error}`);
-          message.retry(); // Retry with exponential backoff
-        }
-      })
-    );
+**KV Write Optimization:**
+```typescript
+// Be mindful of 1 write/second limit
+async function cacheReview(key: string, data: any, env: Env) {
+  try {
+    await env.CACHE.put(key, JSON.stringify(data), {
+      expirationTtl: 86400 // 24 hours
+    })
+  } catch (error) {
+    // Don't fail the review if caching fails
+    console.warn('Cache write failed (rate limit?):', error)
   }
 }
 ```
-- Native Cloudflare Queues integration
-- Automatic retries with exponential backoff
-- Dead letter queue for persistent failures
-- Batch processing for efficiency (up to 10 messages)
-- At-least-once delivery guarantee
 
 ### Technology Stack - Cloudflare Workers (2025)
 
@@ -276,7 +260,7 @@ Leveraging the full Cloudflare platform with 2025 enhancements:
 - **Runtime**: Cloudflare Workers (V8 Isolates) - zero cold starts
 - **Language**: TypeScript (strict mode with `@cloudflare/workers-types`)
 - **API Framework**: Hono v4 (used internally by Cloudflare for D1, KV, Queues)[^37]
-- **Queue**: Cloudflare Queues (6 concurrent builds on paid plans)[^38]
+- **Async**: event.waitUntil() for free tier (no queues needed)
 - **Storage**: Workers KV + R2 for large files (no D1 - edge-native)
 - **LLM Integration**: GitHub Models API + Workers AI (300 req/min)[^28]
 - **AI Features**: Cloudy AI agent for configuration optimization[^31]

@@ -1,0 +1,13 @@
+config:
+  argusai:environment: development
+  argusai:githubAppId: your-dev-app-id
+  # Optional: zoneId for custom domain
+  # argusai:zoneId: your-zone-id
+  
+  # Secrets (use `pulumi config set --secret` to set these)
+  # argusai:githubAppPrivateKey: |
+  #   -----BEGIN RSA PRIVATE KEY-----
+  #   ...
+  #   -----END RSA PRIVATE KEY-----
+  # argusai:githubWebhookSecret: your-webhook-secret
+  # argusai:githubToken: ghp_your_token_with_models_read

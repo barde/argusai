@@ -16,7 +16,11 @@
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\""
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "logs": "wrangler tail",
+    "logs:prod": "wrangler tail --env production",
+    "kv:list": "wrangler kv:key list --binding=CACHE",
+    "kv:get": "wrangler kv:key get --binding=CACHE"
   },
   "keywords": [
     "github",
@@ -43,6 +47,7 @@
     "wrangler": "^3.99.0"
   },
   "dependencies": {
+    "@octokit/auth-app": "^8.0.1",
     "@octokit/rest": "^21.0.2",
     "@octokit/webhooks-types": "^7.6.1",
     "hono": "^4.6.14",

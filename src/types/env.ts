@@ -17,20 +17,6 @@ export interface Env {
   RATE_LIMITS: KVNamespace;
   CONFIG: KVNamespace;
 
-  // Queue
-  REVIEW_QUEUE: Queue<ReviewMessage>;
-
   // Optional bindings
-  DIFF_STORAGE?: R2Bucket;
-}
-
-export interface ReviewMessage {
-  repository: string;
-  prNumber: number;
-  installationId: number;
-  action: 'opened' | 'synchronize' | 'edited' | 'ready_for_review';
-  sha: string;
-  timestamp: number;
-  eventId: string;
-  retryCount?: number;
+  LOG_STORAGE?: R2Bucket; // For batch log storage if needed
 }

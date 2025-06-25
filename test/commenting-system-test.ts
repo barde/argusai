@@ -1,6 +1,8 @@
 /**
  * Test file to verify ArgusAI commenting system functionality
  * This file intentionally contains various code patterns to test different review scenarios
+ * 
+ * Update: Testing webhook trigger after fixing webhook URL configuration
  */
 
 // Test 1: SQL injection vulnerability (should trigger security warning)

@@ -24,7 +24,7 @@ export interface ChatMessage {
 }
 
 export class GitHubModelsService {
-  private readonly apiUrl = 'https://models.inference.ai.azure.com/chat/completions';
+  private readonly apiUrl = 'https://api.github.com/chat/completions';
   private readonly model: string;
   
   constructor(private env: Env) {

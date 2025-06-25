@@ -83,6 +83,9 @@ id = "f28a375dc99b45c8905e0d7016544a13"
 [env.production.performance]
 cpu_ms = 50  # Limit CPU time per request
 
-# Logpush (optional)
-# [env.production.logpush]
-# enabled = true
+# Logpush configuration for better log collection
+[env.development.logpush]
+enabled = true
+
+[env.production.logpush]
+enabled = true

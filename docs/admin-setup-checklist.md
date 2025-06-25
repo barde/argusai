@@ -88,11 +88,15 @@ wrangler kv:namespace create "CONFIG" --env production
 ```
 - [ ] **Production CONFIG namespace ID**: _________________
 
-## Step 7: Create Queue
+## Step 7: Create Queue (Skip if Using Free Tier)
+
+**Note**: Queues require a Workers Paid plan. If you're using the free tier architecture, skip this step and refer to the [free tier architecture guide](../ARCHITECTURE-FREE-TIER.md).
+
 ```bash
+# Only if you have Workers Paid plan:
 wrangler queues create argusai-reviews
 ```
-- [ ] Queue created successfully
+- [ ] Queue created successfully (or skipped for free tier)
 
 ## Step 8: Update wrangler.toml
 
@@ -134,37 +138,51 @@ binding = "CONFIG"
 id = "[Your Production CONFIG namespace ID from Step 6]"
 ```
 
-## Step 9: Set Secrets
+## Step 9: Build and Deploy (Required Before Setting Secrets)
 
+**Important**: You must build and deploy the Worker first before you can add secrets to it.
+
+### Build the project:
 ```bash
-# Set the GitHub App private key (paste the entire .pem file contents)
-wrangler secret put GITHUB_APP_PRIVATE_KEY
-
-# Set the webhook secret (from Step 4)
-wrangler secret put GITHUB_WEBHOOK_SECRET
-
-# Set the GitHub token (from Step 5)
-wrangler secret put GITHUB_TOKEN
+npm run build
 ```
-
-For production:
-```bash
-wrangler secret put GITHUB_APP_PRIVATE_KEY --env production
-wrangler secret put GITHUB_WEBHOOK_SECRET --env production
-wrangler secret put GITHUB_TOKEN --env production
-```
-
-## Step 10: Deploy
 
 ### Development deployment:
 ```bash
-wrangler deploy
+wrangler deploy --env development
 ```
 
 ### Production deployment:
 ```bash
 wrangler deploy --env production
 ```
+
+**Note**: If you encounter TypeScript errors during build, ensure all dependencies are installed with `npm install`.
+
+## Step 10: Set Secrets
+
+Now that the Workers exist, you can add secrets to them:
+
+### For development environment:
+```bash
+# Set the GitHub App private key (paste the entire .pem file contents)
+wrangler secret put GITHUB_APP_PRIVATE_KEY --env development
+
+# Set the webhook secret (from Step 4)
+wrangler secret put GITHUB_WEBHOOK_SECRET --env development
+
+# Set the GitHub token (from Step 5)
+wrangler secret put GITHUB_TOKEN --env development
+```
+
+### For production environment:
+```bash
+wrangler secret put GITHUB_APP_PRIVATE_KEY --env production
+wrangler secret put GITHUB_WEBHOOK_SECRET --env production
+wrangler secret put GITHUB_TOKEN --env production
+```
+
+**Note**: If you see a warning about multiple environments, always specify the environment with `--env development` or `--env production`.
 
 ## Step 11: Update GitHub App Webhook URL
 

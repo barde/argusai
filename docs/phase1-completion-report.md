@@ -55,7 +55,12 @@ This report confirms that Phase 1 of the ArgusAI project is **COMPLETE**. All th
 3. **GITHUB_TOKEN**
    - Source: GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens
    - Required permission: `models:read`
-   - Command: `wrangler secret put GITHUB_TOKEN`
+   - Command: `wrangler secret put GITHUB_TOKEN --env development` (or `--env production`)
+
+**Important**: Deploy the Worker first before setting secrets:
+```bash
+wrangler deploy --env development  # or --env production
+```
 
 ### Required Environment Variables (in wrangler.toml)
 
@@ -81,9 +86,12 @@ wrangler kv:namespace create "CONFIG" --env production
 
 Update the IDs in wrangler.toml after creation.
 
-### Required Queue
+### Required Queue (Only for Paid Plans)
+
+**Note**: Queues require a Workers Paid plan. For free tier deployment, see [ARCHITECTURE-FREE-TIER.md](../ARCHITECTURE-FREE-TIER.md).
 
 ```bash
+# Only if you have Workers Paid plan:
 wrangler queues create argusai-reviews
 ```
 

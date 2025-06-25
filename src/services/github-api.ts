@@ -10,6 +10,14 @@ export class GitHubAPIService {
   private octokit: Octokit;
   
   constructor(private env: Env, installationId: number) {
+    logger.info('=== GITHUB API INIT ===', {
+      appId: env.GITHUB_APP_ID,
+      installationId,
+      hasPrivateKey: !!env.GITHUB_APP_PRIVATE_KEY,
+      privateKeyLength: env.GITHUB_APP_PRIVATE_KEY?.length || 0,
+      privateKeyStart: env.GITHUB_APP_PRIVATE_KEY?.substring(0, 50) || 'NO KEY'
+    });
+    
     const auth = createAppAuth({
       appId: parseInt(env.GITHUB_APP_ID),
       privateKey: env.GITHUB_APP_PRIVATE_KEY,
@@ -50,8 +58,11 @@ export class GitHubAPIService {
         changedFiles: pr.changed_files
       };
     } catch (error) {
-      logger.error('Failed to fetch pull request', error as Error, {
-        owner, repo, pullNumber
+      logger.error('=== GITHUB API ERROR (getPullRequest) ===', error as Error, {
+        owner, repo, pullNumber,
+        statusCode: (error as any).status,
+        message: (error as any).message,
+        response: (error as any).response?.data
       });
       throw error;
     }

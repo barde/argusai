@@ -96,6 +96,15 @@ async function processReviewAsync(reviewData: ReviewData, env: Env): Promise<voi
 
     // Step 3: Initialize services
     const [owner, repo] = reviewData.repository.split('/');
+    logger.info('Initializing services', {
+      owner,
+      repo,
+      installationId: reviewData.installationId,
+      hasAppId: !!env.GITHUB_APP_ID,
+      hasAppKey: !!env.GITHUB_APP_PRIVATE_KEY,
+      hasToken: !!env.GITHUB_TOKEN
+    });
+    
     const { GitHubAPIService } = await import('./github-api');
     const { GitHubModelsService } = await import('./github-models');
     const { ReviewFormatter } = await import('./review-formatter');

@@ -1,7 +1,7 @@
 /**
  * ArgusAI Bot Test File v2
  * This file contains intentional issues to test the bot's review capabilities
- * Update: Testing with correct Azure endpoint and fine-grained token
+ * Update: Testing with correct GitHub App private key
  */
 
 // Test 1: Hardcoded API credentials (CRITICAL security issue)

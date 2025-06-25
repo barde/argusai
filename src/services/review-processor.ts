@@ -94,20 +94,56 @@ async function processReviewAsync(reviewData: ReviewData, env: Env): Promise<voi
       throw new Error('Rate limit exceeded');
     }
 
-    // Step 3: Fetch PR diff from GitHub
-    logger.info('Fetching PR diff from GitHub');
-    // TODO: Implement GitHub API client to fetch diff
-    // const diff = await githubService.getPRDiff(reviewData.repository, reviewData.prNumber);
+    // Step 3: Initialize services
+    const [owner, repo] = reviewData.repository.split('/');
+    const { GitHubAPIService } = await import('./github-api');
+    const { GitHubModelsService } = await import('./github-models');
+    const { ReviewFormatter } = await import('./review-formatter');
+    
+    const githubAPI = new GitHubAPIService(env, reviewData.installationId);
+    const modelsService = new GitHubModelsService(env);
 
-    // Step 4: Analyze with GitHub Models
+    // Step 4: Fetch PR data and diff
+    logger.info('Fetching PR data from GitHub');
+    const [prData, diff] = await Promise.all([
+      githubAPI.getPullRequest(owner, repo, reviewData.prNumber),
+      githubAPI.getPullRequestDiff(owner, repo, reviewData.prNumber)
+    ]);
+
+    // Step 5: Analyze with GitHub Models
     logger.info('Sending to GitHub Models for analysis');
-    // TODO: Implement LLM service for analysis
-    // const analysis = await llmService.analyzeCode(diff, reviewData.payload);
+    const startAnalysis = Date.now();
+    const aiResponseText = await modelsService.generateReview(diff, {
+      title: prData.title,
+      description: prData.description,
+      author: prData.author,
+      targetBranch: prData.targetBranch
+    });
+    const analysisTime = Date.now() - startAnalysis;
 
-    // Step 5: Post review comments
-    logger.info('Posting review comments to GitHub');
-    // TODO: Implement comment posting
-    // await githubService.postReview(reviewData.repository, reviewData.prNumber, analysis);
+    // Step 6: Parse and format the response
+    const aiResponse = ReviewFormatter.parseAIResponse(aiResponseText);
+    const review = ReviewFormatter.formatReview(aiResponse, {
+      model: env.GITHUB_MODEL || 'gpt-4o-mini',
+      tokensUsed: 0, // This would come from the API response
+      processingTime: analysisTime
+    });
+
+    // Step 7: Post review to GitHub
+    logger.info('Posting review to GitHub');
+    const reviewEvent = aiResponse.summary.verdict === 'approve' ? 'APPROVE' :
+                       aiResponse.summary.verdict === 'request_changes' ? 'REQUEST_CHANGES' :
+                       'COMMENT';
+    
+    await githubAPI.createReview(owner, repo, reviewData.prNumber, {
+      body: review.body,
+      event: reviewEvent,
+      comments: review.comments.map(comment => ({
+        path: comment.path,
+        line: comment.line,
+        body: comment.body
+      }))
+    });
 
     // Step 6: Update rate limit and cache
     await Promise.all([
@@ -119,7 +155,8 @@ async function processReviewAsync(reviewData: ReviewData, env: Env): Promise<voi
       env.CACHE.put(cacheKey, JSON.stringify({
         timestamp: Date.now(),
         sha: reviewData.sha,
-        // analysis results would go here
+        review: review,
+        aiResponse: aiResponse
       }), {
         expirationTtl: 86400 * 7, // 7 days
       }).catch(error => {

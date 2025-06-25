@@ -1,6 +1,7 @@
 /**
  * ArgusAI Bot Test File v2
  * This file contains intentional issues to test the bot's review capabilities
+ * Update: Triggering webhook to capture logs
  */
 
 // Test 1: Hardcoded API credentials (CRITICAL security issue)

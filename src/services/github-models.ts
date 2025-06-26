@@ -98,6 +98,14 @@ export class GitHubModelsService {
             error: errorText,
             hint: 'Check token permissions'
           });
+        } else if (response.status === 413) {
+          errorMessage = '413 Payload Too Large';
+          logger.error('GitHub Models API payload too large', undefined, {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText,
+            hint: 'Diff is too large, needs chunking'
+          });
         } else {
           logger.error('GitHub Models API error', undefined, {
             status: response.status,

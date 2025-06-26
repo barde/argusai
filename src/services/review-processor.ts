@@ -119,15 +119,90 @@ export async function processReviewAsync(reviewData: ReviewData, env: Env): Prom
       githubAPI.getPullRequestDiff(owner, repo, reviewData.prNumber)
     ]);
 
-    // Step 5: Analyze with GitHub Models
+    // Step 5: Analyze with GitHub Models (with chunking support)
     logger.info('Sending to GitHub Models for analysis');
     const startAnalysis = Date.now();
-    const aiResponseText = await modelsService.generateReview(diff, {
-      title: prData.title,
-      description: prData.description,
-      author: prData.author,
-      targetBranch: prData.targetBranch
-    });
+    
+    let aiResponseText: string;
+    
+    try {
+      // Try sending the full diff first
+      aiResponseText = await modelsService.generateReview(diff, {
+        title: prData.title,
+        description: prData.description,
+        author: prData.author,
+        targetBranch: prData.targetBranch
+      });
+    } catch (error: any) {
+      if (error.message?.includes('413') || error.message?.includes('Payload Too Large')) {
+        logger.info('PR too large, switching to file-based review', {
+          pr: reviewData.prNumber,
+          diffSize: diff.length
+        });
+        
+        // Get individual files
+        const files = await githubAPI.getChangedFiles(owner, repo, reviewData.prNumber);
+        
+        logger.info('Processing files individually', {
+          fileCount: files.length,
+          pr: reviewData.prNumber
+        });
+        
+        // Review each file separately
+        const fileReviews: string[] = [];
+        let skippedFiles = 0;
+        
+        for (const file of files) {
+          if (file.patch) { // Only review files with changes
+            try {
+              logger.info('Reviewing file', {
+                filename: file.filename,
+                additions: file.additions,
+                deletions: file.deletions
+              });
+              
+              const fileReview = await modelsService.generateReview(file.patch, {
+                title: `Review of ${file.filename}`,
+                description: `Part of PR: ${prData.title}\nFile: ${file.filename}\nChanges: +${file.additions} -${file.deletions}`,
+                author: prData.author,
+                targetBranch: prData.targetBranch
+              });
+              
+              fileReviews.push(`### 📄 ${file.filename}\n${fileReview}`);
+            } catch (err: any) {
+              logger.warn(`Skipping large file ${file.filename}`, err as Error);
+              skippedFiles++;
+              fileReviews.push(`### 📄 ${file.filename}\n⚠️ File too large to review individually`);
+            }
+          }
+        }
+        
+        // Create a summary header
+        const summaryHeader = `## 🔍 PR Review Summary
+        
+**Title:** ${prData.title}
+**Author:** ${prData.author}
+**Files:** ${files.length} files changed
+**Skipped:** ${skippedFiles} files (too large)
+
+---
+
+`;
+        
+        // Combine all file reviews
+        aiResponseText = summaryHeader + fileReviews.join('\n\n---\n\n');
+        
+        logger.info('File-based review completed', {
+          pr: reviewData.prNumber,
+          filesReviewed: files.length - skippedFiles,
+          skippedFiles
+        });
+      } else {
+        // Re-throw if it's not a payload size error
+        throw error;
+      }
+    }
+    
     const analysisTime = Date.now() - startAnalysis;
 
     // Step 6: Parse and format the response

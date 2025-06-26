@@ -1,7 +1,7 @@
 /**
  * Large File Test for ArgusAI Chunking
  * This file contains multiple issues to ensure the bot can review large files
- * Updated: Testing with correct webhook URL - https://argusai.meise.workers.dev
+ * Updated: Final test with all secrets configured
  */
 
 // Section 1: Authentication Issues

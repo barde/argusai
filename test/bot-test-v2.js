@@ -1,7 +1,7 @@
 /**
  * ArgusAI Bot Test File v2
  * This file contains intentional issues to test the bot's review capabilities
- * Update: Testing with comprehensive debugging enabled
+ * Update: Testing with PKCS8 format private key
  */
 
 // Test 1: Hardcoded API credentials (CRITICAL security issue)

@@ -1,7 +1,7 @@
 /**
  * Large File Test for ArgusAI Chunking
  * This file contains multiple issues to ensure the bot can review large files
- * Updated: Testing after redeployment - secrets should work now
+ * Updated: Final attempt - debugging secret access issue
  */
 
 // Section 1: Authentication Issues

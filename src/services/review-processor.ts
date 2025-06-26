@@ -64,7 +64,7 @@ export async function processReviewWithRetry(
   });
 }
 
-async function processReviewAsync(reviewData: ReviewData, env: Env): Promise<void> {
+export async function processReviewAsync(reviewData: ReviewData, env: Env): Promise<void> {
   const startTime = Date.now();
 
   logger.info('Starting review processing', {

@@ -6,6 +6,7 @@ import { healthHandler } from './handlers/health';
 import { configHandler } from './handlers/config';
 import { debugHandler } from './handlers/debug';
 import { testAuthHandler } from './handlers/test-auth';
+import { testReviewHandler } from './handlers/test-review';
 import type { Env } from './types/env';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -27,6 +28,9 @@ app.get('/debug', (c) => {
 
 // Test auth endpoint (development only)
 app.get('/test-auth', testAuthHandler);
+
+// Test review endpoint (development only)
+app.get('/test-review', testReviewHandler);
 
 // GitHub webhook endpoint
 app.post('/webhooks/github', webhookHandler);

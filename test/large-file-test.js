@@ -1,7 +1,7 @@
 /**
  * Large File Test for ArgusAI Chunking
  * This file contains multiple issues to ensure the bot can review large files
- * Updated: Testing chunking implementation v2
+ * Updated: Testing chunking implementation v3 - webhook secret fixed
  */
 
 // Section 1: Authentication Issues

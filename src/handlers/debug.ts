@@ -1,5 +1,6 @@
 import { Context } from 'hono';
 import type { Env } from '../types/env';
+import { StorageServiceFactory } from '../storage';
 
 export async function debugHandler(c: Context<{ Bindings: Env }>) {
   const info = {
@@ -23,24 +24,22 @@ export async function debugHandler(c: Context<{ Bindings: Env }>) {
     },
   };
 
-  // Try to get last error from cache
+  // Initialize storage service
+  const storageFactory = new StorageServiceFactory();
+  const storage = storageFactory.create(c.env);
+
+  // Try to get last error from storage
   let lastError = null;
   try {
-    const errorData = await c.env.CACHE.get('debug:last-error');
-    if (errorData) {
-      lastError = JSON.parse(errorData);
-    }
+    lastError = await storage.getDebugData('error');
   } catch (_e) {
     // Ignore
   }
 
-  // Try to get last webhook from cache
+  // Try to get last webhook from storage
   let lastWebhook = null;
   try {
-    const webhookData = await c.env.CACHE.get('debug:last-webhook');
-    if (webhookData) {
-      lastWebhook = JSON.parse(webhookData);
-    }
+    lastWebhook = await storage.getDebugData('webhook');
   } catch (_e) {
     // Ignore
   }
@@ -54,24 +53,21 @@ export async function debugHandler(c: Context<{ Bindings: Env }>) {
 
 export async function saveDebugError(env: Env, error: any, context: any) {
   try {
-    await env.CACHE.put(
-      'debug:last-error',
-      JSON.stringify({
-        timestamp: new Date().toISOString(),
-        error:
-          error instanceof Error
-            ? {
-                message: error.message,
-                stack: error.stack,
-                name: error.name,
-              }
-            : error,
-        context,
-      }),
-      {
-        expirationTtl: 3600, // 1 hour
-      }
-    );
+    const storageFactory = new StorageServiceFactory();
+    const storage = storageFactory.create(env);
+
+    await storage.saveDebugData('error', {
+      timestamp: new Date().toISOString(),
+      error:
+        error instanceof Error
+          ? {
+              message: error.message,
+              stack: error.stack,
+              name: error.name,
+            }
+          : error,
+      context,
+    });
   } catch (e) {
     console.error('Failed to save debug error:', e);
   }
@@ -79,19 +75,16 @@ export async function saveDebugError(env: Env, error: any, context: any) {
 
 export async function saveDebugWebhook(env: Env, payload: any) {
   try {
-    await env.CACHE.put(
-      'debug:last-webhook',
-      JSON.stringify({
-        timestamp: new Date().toISOString(),
-        event: payload.action,
-        pr: payload.pull_request?.number,
-        repo: payload.repository?.full_name,
-        installation: payload.installation?.id,
-      }),
-      {
-        expirationTtl: 3600, // 1 hour
-      }
-    );
+    const storageFactory = new StorageServiceFactory();
+    const storage = storageFactory.create(env);
+
+    await storage.saveDebugData('webhook', {
+      timestamp: new Date().toISOString(),
+      event: payload.action,
+      pr: payload.pull_request?.number,
+      repo: payload.repository?.full_name,
+      installation: payload.installation?.id,
+    });
   } catch (e) {
     console.error('Failed to save debug webhook:', e);
   }

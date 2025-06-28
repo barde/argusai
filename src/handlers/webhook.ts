@@ -5,6 +5,7 @@ import { checkRateLimit } from '../utils/rateLimit';
 import type { Env } from '../types/env';
 import type { GitHubWebhookHeaders, PullRequestEvent } from '../types/github';
 import { processReviewWithRetry } from '../services/review-processor';
+import { StorageServiceFactory } from '../storage';
 
 export async function webhookHandler(c: Context<{ Bindings: Env }>) {
   const startTime = Date.now();
@@ -75,9 +76,13 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
       return c.json({ message: 'Draft PR ignored' }, 200);
     }
 
+    // Initialize storage service
+    const storageFactory = new StorageServiceFactory();
+    const storage = storageFactory.create(c.env);
+
     // Check for duplicate events
     const isDupe = await isDuplicateEvent(
-      c.env.CACHE,
+      storage,
       payload.repository.full_name,
       payload.pull_request.number,
       deliveryId
@@ -88,7 +93,7 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
     }
 
     // Check rate limits
-    const rateLimitOk = await checkRateLimit(c.env.RATE_LIMITS, payload.installation?.id || 0);
+    const rateLimitOk = await checkRateLimit(storage, payload.installation?.id || 0);
 
     if (!rateLimitOk) {
       return c.json({ error: 'Rate limit exceeded' }, 429);

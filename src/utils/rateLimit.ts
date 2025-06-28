@@ -1,8 +1,10 @@
+import { IStorageService } from '../storage/interface';
+
 /**
- * Simple rate limiting using KV storage
+ * Simple rate limiting using storage service
  */
 export async function checkRateLimit(
-  rateLimits: KVNamespace,
+  storage: IStorageService,
   installationId: number
 ): Promise<boolean> {
   // Skip rate limiting for installation ID 0 (testing)
@@ -10,28 +12,14 @@ export async function checkRateLimit(
     return true;
   }
 
-  const now = Date.now();
-  const window = Math.floor(now / 60000); // 1-minute windows
-  const key = `rate:${installationId}:${window}`;
-
   try {
-    const currentCount = await rateLimits.get(key);
-    const count = currentCount ? parseInt(currentCount, 10) : 0;
+    const result = await storage.incrementRateLimit(String(installationId));
 
-    // Allow 60 requests per minute per installation
-    const RATE_LIMIT = 60;
-
-    if (count >= RATE_LIMIT) {
+    if (!result.allowed) {
       console.warn(`Rate limit exceeded for installation ${installationId}`);
-      return false;
     }
 
-    // Increment counter with TTL
-    await rateLimits.put(key, String(count + 1), {
-      expirationTtl: 120, // 2 minutes TTL
-    });
-
-    return true;
+    return result.allowed;
   } catch (error) {
     console.error('Rate limit check error:', error);
     // On error, allow the request
@@ -43,23 +31,29 @@ export async function checkRateLimit(
  * Get remaining rate limit for an installation
  */
 export async function getRateLimit(
-  rateLimits: KVNamespace,
+  storage: IStorageService,
   installationId: number
 ): Promise<{ limit: number; remaining: number; resetAt: number }> {
   const now = Date.now();
   const window = Math.floor(now / 60000);
-  const key = `rate:${installationId}:${window}`;
 
   try {
-    const currentCount = await rateLimits.get(key);
-    const count = currentCount ? parseInt(currentCount, 10) : 0;
+    const rateLimitData = await storage.getRateLimit(String(installationId));
     const RATE_LIMIT = 60;
 
-    return {
-      limit: RATE_LIMIT,
-      remaining: Math.max(0, RATE_LIMIT - count),
-      resetAt: (window + 1) * 60000,
-    };
+    if (rateLimitData) {
+      return {
+        limit: RATE_LIMIT,
+        remaining: RATE_LIMIT - rateLimitData.count,
+        resetAt: rateLimitData.resetAt,
+      };
+    } else {
+      return {
+        limit: RATE_LIMIT,
+        remaining: RATE_LIMIT,
+        resetAt: (window + 1) * 60000,
+      };
+    }
   } catch (error) {
     console.error('Get rate limit error:', error);
     return {

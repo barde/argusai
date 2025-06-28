@@ -1,6 +1,7 @@
 import { Context } from 'hono';
 import { Octokit } from '@octokit/rest';
 import { Env } from '../types/env';
+import { StorageServiceFactory } from '../storage';
 
 interface StatusCheck {
   name: string;
@@ -113,16 +114,29 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
     { name: 'CONFIG', binding: c.env.CONFIG },
   ];
 
+  // Initialize storage service before using it
+  const storageFactory = new StorageServiceFactory();
+  const storage = storageFactory.create(c.env);
+
   for (const kv of kvNamespaces) {
     try {
       if (kv.binding) {
-        // Try to list keys to verify access
-        await kv.binding.list({ limit: 1 });
-        checks.push({
-          name: `KV Namespace: ${kv.name}`,
-          status: 'ok',
-          message: 'Connected',
-        });
+        // Try to use storage service generic operations to verify access
+        try {
+          await storage.list({ prefix: '', limit: 1 });
+          checks.push({
+            name: `KV Namespace: ${kv.name}`,
+            status: 'ok',
+            message: 'Connected',
+          });
+        } catch (kvError) {
+          checks.push({
+            name: `KV Namespace: ${kv.name}`,
+            status: 'error',
+            message: 'Connection failed',
+            details: kvError instanceof Error ? kvError.message : 'Unknown error',
+          });
+        }
       } else {
         const isLocal = c.env.ENVIRONMENT === 'development' || !c.env.ENVIRONMENT;
         checks.push({
@@ -198,18 +212,16 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
     }
   }
 
-  // Get recent activity from KV
+  // Get recent activity from storage
   let recentActivity: any = {};
   try {
-    const debugKeys = await c.env.CACHE.list({ prefix: 'debug:', limit: 10 });
-    if (debugKeys.keys.length > 0) {
-      for (const key of debugKeys.keys) {
-        const value = await c.env.CACHE.get(key.name, 'json');
-        if (value) {
-          recentActivity[key.name] = value;
-        }
-      }
-    }
+    const errorData = await storage.getDebugData('error');
+    const webhookData = await storage.getDebugData('webhook');
+    const apiCallData = await storage.getDebugData('api-call');
+
+    if (errorData) recentActivity['debug:error'] = errorData;
+    if (webhookData) recentActivity['debug:webhook'] = webhookData;
+    if (apiCallData) recentActivity['debug:api-call'] = apiCallData;
   } catch (_error) {
     recentActivity.error = 'Failed to fetch recent activity';
   }

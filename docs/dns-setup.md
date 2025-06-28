@@ -1,26 +1,22 @@
 # DNS Setup for argus.vogel.yoga
 
-## Required DNS Configuration
+## Current Configuration
 
-To make ArgusAI available at `https://argus.vogel.yoga`, you need to configure the following DNS record:
+The domain is successfully configured and working at `https://argus.vogel.yoga`
 
-### CNAME Record
-```
-Type: CNAME
-Name: argus
-Value: argusai.barde.workers.dev
-TTL: Auto (or 300 seconds)
-Proxy: Yes (Orange cloud ON in Cloudflare)
-```
-
-### Alternative: A Record (if using Cloudflare)
-If you prefer using an A record with Cloudflare's proxy:
+### DNS Configuration Used
 ```
 Type: A
 Name: argus
-Value: 192.0.2.1 (dummy IP, will be proxied)
+Value: 192.0.2.1 (dummy IP, proxied by Cloudflare)
 TTL: Auto
-Proxy: Yes (Orange cloud must be ON)
+Proxy: Yes (Orange cloud ON)
+```
+
+### Worker Route Configuration
+```
+Pattern: argus.vogel.yoga/*
+Zone: vogel.yoga
 ```
 
 ## Verification

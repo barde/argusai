@@ -3,7 +3,7 @@
 import crypto from 'crypto';
 
 // Configuration
-const WORKER_URL = process.env.WORKER_URL || 'https://argusai-dev.meise.workers.dev';
+const WORKER_URL = process.env.WORKER_URL || 'https://argus.vogel.yoga';
 const WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || 'test-secret';
 const REPO_NAME = process.env.REPO_NAME || 'test-org/test-repo';
 

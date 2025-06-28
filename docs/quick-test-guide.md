@@ -1,15 +1,15 @@
 # Quick Test Guide for ArgusAI
 
-## Current Deployment
-- **Worker URL**: https://argusai-dev.meise.workers.dev
-- **Health Check**: https://argusai-dev.meise.workers.dev/health
+## Production Deployment
+- **URL**: https://argus.vogel.yoga
+- **Health Check**: https://argus.vogel.yoga/health
 
 ## Option 1: Test with Real GitHub PR (Recommended)
 
 1. **Install GitHub App on a Test Repository**
    - Go to your GitHub App settings
    - Install on a test repository
-   - Set webhook URL to: `https://argusai-dev.meise.workers.dev/webhooks/github`
+   - Set webhook URL to: `https://argus.vogel.yoga/webhooks/github`
 
 2. **Create a Test PR**
    ```bash
@@ -57,10 +57,10 @@
 4. **Monitor the Review**
    ```bash
    # Watch logs in real-time
-   wrangler tail --env development
+   wrangler tail
    
    # Or filter for your PR
-   wrangler tail --env development --search "test-code.js"
+   wrangler tail --search "test-code.js"
    ```
 
 ## Option 2: Manual Webhook Test
@@ -78,7 +78,7 @@
 2. **Check Processing**
    ```bash
    # View logs
-   wrangler tail --env development --format pretty
+   wrangler tail --format pretty
    ```
 
 ## What to Expect
@@ -120,17 +120,17 @@ The code has several critical issues that need to be addressed...
 
 2. **Check Worker Logs**
    ```bash
-   wrangler tail --env development --search "ERROR"
+   wrangler tail --search "ERROR"
    ```
 
 3. **Verify Secrets**
    ```bash
-   wrangler secret list --env development
+   wrangler secret list
    ```
 
 4. **Test Health Endpoint**
    ```bash
-   curl https://argusai-dev.meise.workers.dev/health
+   curl https://argus.vogel.yoga/health
    ```
 
 ### Common Issues

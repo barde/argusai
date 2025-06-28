@@ -23,8 +23,8 @@ PAYLOAD='{
 }'
 
 # Make request
-echo "Sending test webhook to: https://argusai-dev.meise.workers.dev/webhooks/github"
-curl -X POST https://argusai-dev.meise.workers.dev/webhooks/github \
+echo "Sending test webhook to: https://argus.vogel.yoga/webhooks/github"
+curl -X POST https://argus.vogel.yoga/webhooks/github \
   -H "Content-Type: application/json" \
   -H "X-GitHub-Event: pull_request" \
   -H "X-GitHub-Delivery: test-$(date +%s)" \

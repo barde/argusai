@@ -61,25 +61,25 @@ wrangler secret put SENTRY_DSN --env production
 wrangler secret put SLACK_WEBHOOK_URL --env production
 ```
 
-## Environment-Specific Configuration
+## Production Configuration
 
-### Development vs Production
+### Single Environment Setup
 ```toml
-# Development environment
-[env.development]
-name = "argusai-dev"
-
-[[env.development.kv_namespaces]]
-binding = "CACHE"
-id = "dev-namespace-id"  # Different namespace for dev
-
-# Production environment
-[env.production]
+# Production configuration
 name = "argusai"
 
-[[env.production.kv_namespaces]]
+# KV Namespaces
+[[kv_namespaces]]
 binding = "CACHE"
-id = "prod-namespace-id"  # Different namespace for prod
+id = "cache-namespace-id"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "rate-limits-namespace-id"
+
+[[kv_namespaces]]
+binding = "CONFIG"
+id = "config-namespace-id"
 ```
 
 ## Local Development Secrets

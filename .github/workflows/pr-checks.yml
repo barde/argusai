@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  issues: write  # Required for managing labels
 
 jobs:
   size-check:
@@ -42,17 +43,13 @@ jobs:
               comment = '❌ This is an extra large PR (>= 500 lines). Please break it down into smaller PRs.';
             }
             
-            // Try to add label, but don't fail if we can't
-            try {
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                labels: [label]
-              });
-            } catch (error) {
-              console.log(`Could not add label '${label}': ${error.message}`);
-            }
+            // Add label
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              labels: [label]
+            });
 
   conventional-commits:
     name: Conventional Commits Check
@@ -84,8 +81,6 @@ jobs:
   pr-labeler:
     name: Auto Label PR
     runs-on: ubuntu-latest
-    # Only run if we have write permissions
-    if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Label PR based on paths
         uses: actions/labeler@v5

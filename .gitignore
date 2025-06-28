@@ -53,3 +53,4 @@ src/handlers/test-jwt.ts
 src/handlers/test-convert.ts
 **/hardcoded-key*
 **/*private-key*
+.aider*

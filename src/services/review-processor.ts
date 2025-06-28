@@ -2,8 +2,124 @@ import type { Env } from '../types/env';
 import type { WebhookPayload } from '../types/github';
 import { Logger } from '../utils/logger';
 import { ReviewData } from '../types/review';
+import type { GitHubAPIService } from './github-api';
+import type { GitHubModelsService } from './github-models';
 
 const logger = new Logger('review-processor');
+
+// Helper function to add exponential backoff delay
+async function exponentialBackoff(attempt: number, baseDelay: number = 1000): Promise<void> {
+  const delay = Math.min(baseDelay * Math.pow(2, attempt), 30000); // Max 30 seconds
+  await new Promise(resolve => setTimeout(resolve, delay));
+}
+
+// Helper function to perform chunked review
+async function performChunkedReview(
+  githubAPI: GitHubAPIService,
+  modelsService: GitHubModelsService,
+  logger: Logger,
+  owner: string,
+  repo: string,
+  prNumber: number,
+  prData: any,
+  env: Env
+): Promise<string> {
+  // Get individual files
+  const files = await githubAPI.getChangedFiles(owner, repo, prNumber);
+  
+  logger.info('Processing files individually', {
+    fileCount: files.length,
+    pr: prNumber
+  });
+  
+  // Configuration for parallel processing
+  const CONCURRENT_FILE_REVIEWS = parseInt(env.CONCURRENT_FILE_REVIEWS || '3');
+  const MAX_RETRIES = 3;
+  
+  // Process files in batches to avoid overwhelming the API
+  const fileReviews: Map<string, string> = new Map();
+  const skippedFiles: string[] = [];
+  
+  // Function to review a single file with retry logic
+  async function reviewFileWithRetry(file: any): Promise<void> {
+    if (!file.patch) return; // Skip files without changes
+    
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        logger.info('Reviewing file', {
+          filename: file.filename,
+          additions: file.additions,
+          deletions: file.deletions,
+          attempt: attempt + 1
+        });
+        
+        const fileReview = await modelsService.generateReview(file.patch, {
+          title: `Review of ${file.filename}`,
+          description: `Part of PR: ${prData.title}\nFile: ${file.filename}\nChanges: +${file.additions} -${file.deletions}`,
+          author: prData.author,
+          targetBranch: prData.targetBranch
+        });
+        
+        fileReviews.set(file.filename, fileReview);
+        return;
+      } catch (error: any) {
+        if (error.message?.includes('429') && attempt < MAX_RETRIES - 1) {
+          // Rate limit - exponential backoff
+          logger.warn(`Rate limit hit for ${file.filename}, retrying...`, { attempt });
+          await exponentialBackoff(attempt);
+          continue;
+        } else if (error.message?.includes('413') || error.message?.includes('Payload Too Large')) {
+          // File still too large
+          logger.warn(`File too large to review: ${file.filename}`);
+          skippedFiles.push(file.filename);
+          return;
+        } else if (attempt === MAX_RETRIES - 1) {
+          // Final attempt failed
+          logger.error(`Failed to review ${file.filename} after ${MAX_RETRIES} attempts`, error);
+          skippedFiles.push(file.filename);
+          return;
+        }
+        // Retry on other errors
+        await exponentialBackoff(attempt);
+      }
+    }
+  }
+  
+  // Process files in batches
+  const fileBatches: any[][] = [];
+  for (let i = 0; i < files.length; i += CONCURRENT_FILE_REVIEWS) {
+    fileBatches.push(files.slice(i, i + CONCURRENT_FILE_REVIEWS));
+  }
+  
+  for (const batch of fileBatches) {
+    await Promise.all(batch.map(file => reviewFileWithRetry(file)));
+  }
+  
+  // Create a formatted review from individual file reviews
+  const formatter = await import('./review-formatter');
+  const ReviewFormatter = formatter.ReviewFormatter;
+  
+  // Parse individual reviews and create a combined review
+  const parsedReviews = Array.from(fileReviews.entries()).map(([filename, review]) => ({
+    filename,
+    review: ReviewFormatter.parseMarkdownResponse(review)
+  }));
+  
+  // Format the chunked review
+  const chunkedReview = ReviewFormatter.formatChunkedReview(
+    parsedReviews,
+    skippedFiles,
+    prData
+  );
+  
+  logger.info('File-based review completed', {
+    pr: prNumber,
+    filesReviewed: fileReviews.size,
+    skippedFiles: skippedFiles.length
+  });
+  
+  return chunkedReview;
+}
 
 export async function processReviewWithRetry(
   env: Env,
@@ -123,11 +239,30 @@ export async function processReviewAsync(reviewData: ReviewData, env: Env): Prom
     logger.info('Sending to GitHub Models for analysis');
     const startAnalysis = Date.now();
     
+    // Pre-flight check: Estimate payload size to avoid 413 errors
+    const MAX_DIFF_SIZE = parseInt(env.MAX_DIFF_SIZE || '500000'); // 500KB default
+    const estimatedPayloadSize = diff.length + JSON.stringify({
+      title: prData.title,
+      description: prData.description,
+      author: prData.author,
+      targetBranch: prData.targetBranch
+    }).length;
+    
     let aiResponseText: string;
     
-    try {
-      // Try sending the full diff first
-      aiResponseText = await modelsService.generateReview(diff, {
+    if (estimatedPayloadSize > MAX_DIFF_SIZE) {
+      logger.info('PR exceeds size limit, using file-based review', {
+        pr: reviewData.prNumber,
+        diffSize: diff.length,
+        maxSize: MAX_DIFF_SIZE
+      });
+      
+      // Skip directly to file-based review
+      aiResponseText = await performChunkedReview(githubAPI, modelsService, logger, owner, repo, reviewData.prNumber, prData, env);
+    } else {
+      try {
+        // Try sending the full diff
+        aiResponseText = await modelsService.generateReview(diff, {
         title: prData.title,
         description: prData.description,
         author: prData.author,
@@ -140,67 +275,12 @@ export async function processReviewAsync(reviewData: ReviewData, env: Env): Prom
           diffSize: diff.length
         });
         
-        // Get individual files
-        const files = await githubAPI.getChangedFiles(owner, repo, reviewData.prNumber);
-        
-        logger.info('Processing files individually', {
-          fileCount: files.length,
-          pr: reviewData.prNumber
-        });
-        
-        // Review each file separately
-        const fileReviews: string[] = [];
-        let skippedFiles = 0;
-        
-        for (const file of files) {
-          if (file.patch) { // Only review files with changes
-            try {
-              logger.info('Reviewing file', {
-                filename: file.filename,
-                additions: file.additions,
-                deletions: file.deletions
-              });
-              
-              const fileReview = await modelsService.generateReview(file.patch, {
-                title: `Review of ${file.filename}`,
-                description: `Part of PR: ${prData.title}\nFile: ${file.filename}\nChanges: +${file.additions} -${file.deletions}`,
-                author: prData.author,
-                targetBranch: prData.targetBranch
-              });
-              
-              fileReviews.push(`### 📄 ${file.filename}\n${fileReview}`);
-            } catch (err: any) {
-              logger.warn(`Skipping large file ${file.filename}`, err as Error);
-              skippedFiles++;
-              fileReviews.push(`### 📄 ${file.filename}\n⚠️ File too large to review individually`);
-            }
-          }
-        }
-        
-        // Create a summary header
-        const summaryHeader = `## 🔍 PR Review Summary
-        
-**Title:** ${prData.title}
-**Author:** ${prData.author}
-**Files:** ${files.length} files changed
-**Skipped:** ${skippedFiles} files (too large)
-
----
-
-`;
-        
-        // Combine all file reviews
-        aiResponseText = summaryHeader + fileReviews.join('\n\n---\n\n');
-        
-        logger.info('File-based review completed', {
-          pr: reviewData.prNumber,
-          filesReviewed: files.length - skippedFiles,
-          skippedFiles
-        });
+        aiResponseText = await performChunkedReview(githubAPI, modelsService, logger, owner, repo, reviewData.prNumber, prData, env);
       } else {
         // Re-throw if it's not a payload size error
         throw error;
       }
+    }
     }
     
     const analysisTime = Date.now() - startAnalysis;

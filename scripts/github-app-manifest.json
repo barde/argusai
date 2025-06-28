@@ -1,12 +1,12 @@
 {
   "name": "ArgusAI",
   "description": "Intelligent code review bot powered by LLMs, running on Cloudflare Workers edge network",
-  "url": "https://argusai.dev",
+  "url": "https://argus.vogel.yoga",
   "hook_attributes": {
-    "url": "https://api.argusai.dev/webhooks/github"
+    "url": "https://argus.vogel.yoga/webhooks/github"
   },
-  "redirect_url": "https://argusai.dev/setup/callback",
-  "setup_url": "https://argusai.dev/setup",
+  "redirect_url": "https://argus.vogel.yoga/setup/callback",
+  "setup_url": "https://argus.vogel.yoga/setup",
   "setup_on_update": true,
   "public": false,
   "default_permissions": {

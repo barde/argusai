@@ -16,15 +16,20 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('*', logger());
 app.use('/api/*', cors());
 
+// Root endpoint - status page (HTML by default)
+app.get('/', (c) => {
+  c.req.query = () => 'html'; // Force HTML format
+  return statusHandler(c);
+});
+
 // Health check endpoint
 app.get('/health', healthHandler);
 
 // Status endpoint - shows connection status and model quotas
 app.get('/status', statusHandler);
-// Status page (HTML by default)
+// Legacy status page route (redirect to root)
 app.get('/status-page', (c) => {
-  c.req.query = () => 'html'; // Force HTML format
-  return statusHandler(c);
+  return c.redirect('/', 301);
 });
 
 // Debug endpoint (development only)

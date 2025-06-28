@@ -17,12 +17,12 @@ This guide walks you through setting up the ArgusAI GitHub App for your organiza
 2. Fill in the basic information:
    - **GitHub App name**: `ArgusAI` (or `ArgusAI-{org}` if taken)
    - **Description**: "Intelligent code review bot powered by LLMs"
-   - **Homepage URL**: `https://argusai.dev` (or your custom domain)
+   - **Homepage URL**: `https://argus.vogel.yoga` (or your custom domain)
 
 ## Step 2: Configure Webhook
 
 1. **Webhook URL**: 
-   - Production: `https://api.argusai.dev/webhooks/github`
+   - Production: `https://argus.vogel.yoga/webhooks/github`
    - Development: `https://your-worker.workers.dev/webhooks/github`
 
 2. **Webhook secret**: Generate a secure random string:

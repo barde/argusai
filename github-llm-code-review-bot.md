@@ -37,8 +37,8 @@ GitHub Apps do not have a separate name reservation system. To secure the name "
    - Click "New GitHub App"
    - Enter "ArgusAI" as the GitHub App name
    - Fill in the required fields (you can update these later):
-     - Homepage URL: `https://argusai.dev` (can be a placeholder)
-     - Webhook URL: `https://api.argusai.dev/webhooks/github` (can be updated later)
+     - Homepage URL: `https://argus.vogel.yoga` (can be a placeholder)
+     - Webhook URL: `https://argus.vogel.yoga/webhooks/github` (can be updated later)
      - Webhook secret: Generate a secure random string
      - Permissions: Start with minimal permissions (can be expanded later)
 
@@ -312,7 +312,7 @@ workers_dev = false
 # Production environment
 [env.production]
 routes = [
-  { pattern = "api.argusai.dev/*", zone_name = "argusai.dev" }
+  { pattern = "argus.vogel.yoga/*", zone_name = "argus.vogel.yoga" }
 ]
 
 # KV Namespaces
@@ -915,7 +915,7 @@ Following the latest event-driven patterns for LLM workloads[^33]:
 - **Day 3**: Implement GitHub signature verification
 - Simple LLM integration with OpenAI
 - Basic comment posting functionality
-- Deploy to `api.argoai.dev`
+- Deploy to `argus.vogel.yoga`
 
 ### Phase 2: Production Features (Week 1)
 - Implement Cloudflare Queues for async processing
@@ -973,13 +973,13 @@ wrangler secret put GITHUB_TOKEN  # GitHub PAT with models:read scope
 wrangler deploy --env production
 
 # 9. Set up custom domain
-# Add CNAME record: api.argusai.dev -> argusai.workers.dev
+# Add CNAME record: argus.vogel.yoga -> argusai.workers.dev
 ```
 
 ### GitHub App Configuration
 
 1. Go to GitHub Settings → Developer settings → GitHub Apps → ArgusAI
-2. Update Webhook URL to: `https://api.argusai.dev/webhooks/github`
+2. Update Webhook URL to: `https://argus.vogel.yoga/webhooks/github`
 3. Set permissions:
    - Pull requests: Read & Write
    - Issues: Write (for comments)
@@ -1067,7 +1067,7 @@ ArgusAI represents a paradigm shift in code review automation by combining:
 1. **Register "ArgusAI" GitHub App** (5 min)
    - Go to Settings → Developer settings → GitHub Apps → New
    - Name: ArgusAI
-   - Webhook URL: `https://api.argusai.dev/webhooks/github` (update later)
+   - Webhook URL: `https://argus.vogel.yoga/webhooks/github` (update later)
    - Permissions: Pull requests (Read & Write), Issues (Write), Contents (Read)
 
 2. **Create GitHub Token for Models** (1 min)

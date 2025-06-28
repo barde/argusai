@@ -21,7 +21,7 @@ CONCURRENT_FILE_REVIEWS = "3"  # Review 3 files in parallel
 [env.production]
 name = "argusai"
 routes = [
-  { pattern = "api.argusai.dev/*", zone_name = "argusai.dev" }
+  { pattern = "argus.vogel.yoga/*", zone_name = "vogel.yoga" }
 ]
 [env.production.vars]
 ENVIRONMENT = "production"

@@ -43,3 +43,13 @@ coverage/
 # Cloudflare
 wrangler-dist/
 .mf/
+
+# SECURITY: Never commit these files
+src/utils/auth-wrapper.ts
+src/utils/convert-key*.ts
+src/utils/jwt.ts
+src/handlers/test-key.ts
+src/handlers/test-jwt.ts
+src/handlers/test-convert.ts
+**/hardcoded-key*
+**/*private-key*

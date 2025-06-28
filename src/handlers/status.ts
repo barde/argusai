@@ -453,7 +453,7 @@ function generateStatusHTML(data: any): string {
 
   <div class="footer">
     <p>
-      <a href="https://github.com/anthropics/argusai" target="_blank">📚 View on GitHub</a> | 
+      <a href="https://github.com/barde/argusai" target="_blank">📚 View on GitHub</a> | 
       <a href="/status?format=json">🔗 JSON Format</a> | 
       <a href="/health">💚 Health Check</a>
     </p>

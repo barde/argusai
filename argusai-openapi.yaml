@@ -11,17 +11,17 @@ info:
   contact:
     name: ArgusAI Support
     url: https://github.com/yourusername/argusai
-    email: support@argusai.dev
+    email: support@argus.vogel.yoga
   license:
     name: MIT
     identifier: MIT
     url: https://opensource.org/licenses/MIT
   x-logo:
-    url: https://argusai.dev/logo.png
+    url: https://argus.vogel.yoga/logo.png
     altText: ArgusAI Logo
 
 servers:
-  - url: https://api.argusai.dev
+  - url: https://argus.vogel.yoga
     description: Production server (Cloudflare Workers)
   - url: http://localhost:8787
     description: Local development server (Miniflare)
@@ -106,7 +106,7 @@ paths:
           label: GitHub Webhook
           source: |
             # GitHub sends this automatically when configured
-            curl -X POST https://api.argusai.dev/webhooks/github \
+            curl -X POST https://argus.vogel.yoga/webhooks/github \
               -H "Content-Type: application/json" \
               -H "X-GitHub-Event: pull_request" \
               -H "X-GitHub-Delivery: 12345-67890" \

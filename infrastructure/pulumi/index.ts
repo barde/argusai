@@ -119,7 +119,7 @@ const worker = new cloudflare.WorkerScript(`argusai-${environment}`, {
 const workerRoute = environment === "production" && zoneId ? 
     new cloudflare.WorkerRoute("argusai-route", {
         zoneId: zoneId,
-        pattern: "api.argusai.dev/*",
+        pattern: "argus.vogel.yoga/*",
         scriptName: worker.name,
     }) : undefined;
 
@@ -132,7 +132,7 @@ const queueConsumerTrigger = new cloudflare.WorkerCronTrigger("queue-consumer", 
 
 // Exports
 export const workerUrl = environment === "production" && zoneId
-    ? "https://api.argusai.dev"
+    ? "https://argus.vogel.yoga"
     : pulumi.interpolate`https://${worker.name}.${accountId}.workers.dev`;
 
 export const kvNamespaceIds = {

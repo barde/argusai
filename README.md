@@ -3,6 +3,7 @@
 [![API Documentation](https://img.shields.io/badge/API-Swagger-85EA2D?logo=swagger)](https://editor.swagger.io/?url=https://raw.githubusercontent.com/barde/argusai/master/argusai-openapi.yaml)
 [![Platform](https://img.shields.io/badge/Platform-Cloudflare_Workers-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Page-brightgreen)](https://argus.vogel.yoga)
 
 Intelligent GitHub code review bot powered by LLMs, deployed on Cloudflare Workers edge network for instant, global PR analysis.
 
@@ -21,13 +22,26 @@ Intelligent GitHub code review bot powered by LLMs, deployed on Cloudflare Worke
 - [**Architecture Overview**](github-llm-code-review-bot.md) - Detailed technical documentation
 - [**API Reference**](API.md) - Quick API endpoint reference
 
+## 🔍 Monitoring & Status
+
+### Production Instance
+- **Status Page**: [https://argus.vogel.yoga](https://argus.vogel.yoga) - Visual health dashboard (root page)
+- **Status API**: [https://argus.vogel.yoga/status](https://argus.vogel.yoga/status) - JSON status endpoint
+- **Health Check**: [https://argus.vogel.yoga/health](https://argus.vogel.yoga/health) - Simple health endpoint
+
+### Local Development
+When running locally with `wrangler dev`:
+- **Status Page**: [http://localhost:8787](http://localhost:8787) - Root page
+- **Status API**: [http://localhost:8787/status](http://localhost:8787/status)
+- **Health Check**: [http://localhost:8787/health](http://localhost:8787/health)
+
 ## 🎯 Quick Start
 
 ### 1. Register GitHub App
 ```bash
 # Go to GitHub Settings → Developer settings → GitHub Apps → New
 # App name: ArgusAI
-# Webhook URL: https://api.argusai.dev/webhooks/github
+# Webhook URL: https://argus.vogel.yoga/webhooks/github
 ```
 
 ### 2. Get GitHub Token

@@ -22,7 +22,7 @@ variable "account_id" {
 }
 
 variable "zone_id" {
-  description = "Cloudflare Zone ID for argusai.dev (if applicable)"
+  description = "Cloudflare Zone ID for argus.vogel.yoga (if applicable)"
   type        = string
   default     = ""
 }
@@ -158,7 +158,7 @@ resource "cloudflare_worker_script" "argusai" {
 resource "cloudflare_worker_route" "argusai" {
   count       = var.environment == "production" && var.zone_id != "" ? 1 : 0
   zone_id     = var.zone_id
-  pattern     = "api.argusai.dev/*"
+  pattern     = "argus.vogel.yoga/*"
   script_name = cloudflare_worker_script.argusai.name
 }
 
@@ -200,7 +200,7 @@ variable "github_token" {
 # Outputs
 output "worker_url" {
   description = "Worker URL"
-  value       = var.environment == "production" && var.zone_id != "" ? "https://api.argusai.dev" : "https://${cloudflare_worker_script.argusai.name}.${var.account_id}.workers.dev"
+  value       = var.environment == "production" && var.zone_id != "" ? "https://argus.vogel.yoga" : "https://${cloudflare_worker_script.argusai.name}.${var.account_id}.workers.dev"
 }
 
 output "kv_namespace_ids" {

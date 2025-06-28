@@ -3,57 +3,34 @@ main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Development environment
-[env.development]
-name = "argusai-dev"
-[env.development.observability]
-enabled = true
-[env.development.vars]
-ENVIRONMENT = "development"
+# Production configuration (single deployment)
+routes = [
+  { pattern = "argus.vogel.yoga/*", zone_name = "vogel.yoga" }
+]
+
+[vars]
+ENVIRONMENT = "production"
 GITHUB_APP_ID = "1454778"
 GITHUB_MODEL = "gpt-4o-mini"
-LOG_LEVEL = "debug"
-MAX_DIFF_SIZE = "500000"  # 500KB default
-CONCURRENT_FILE_REVIEWS = "3"  # Review 3 files in parallel
-
-# Production environment
-[env.production]
-name = "argusai"
-routes = [
-  { pattern = "api.argusai.dev/*", zone_name = "argusai.dev" }
-]
-[env.production.vars]
-ENVIRONMENT = "production"
-GITHUB_APP_ID = "your-prod-app-id"
-GITHUB_MODEL = "gpt-4o"
 LOG_LEVEL = "info"
 MAX_DIFF_SIZE = "500000"  # 500KB default
 CONCURRENT_FILE_REVIEWS = "3"  # Review 3 files in parallel
 
-# KV Namespaces (create with: wrangler kv:namespace create "NAME")
-[[env.production.kv_namespaces]]
+[observability]
+enabled = true
+
+# KV Namespaces
+[[kv_namespaces]]
 binding = "CACHE"
 id = "df70afec18184e6da7a50bad00cbae45"
 
-[[env.production.kv_namespaces]]
+[[kv_namespaces]]
 binding = "RATE_LIMITS"
 id = "3f9fae87dddd4751823a13ce49dfa81c"
 
-[[env.production.kv_namespaces]]
+[[kv_namespaces]]
 binding = "CONFIG"
 id = "6155db907791462998569c559e71a8cd"
-
-[[env.development.kv_namespaces]]
-binding = "CACHE"
-id = "13021ce160594c9bb2582e976da7a2cc"
-
-[[env.development.kv_namespaces]]
-binding = "RATE_LIMITS"
-id = "06264102637f40a6a366b0cf6b45b2d5"
-
-[[env.development.kv_namespaces]]
-binding = "CONFIG"
-id = "f28a375dc99b45c8905e0d7016544a13"
 
 # Free Tier: No queues needed
 # Processing happens directly in webhook handler using event.waitUntil()

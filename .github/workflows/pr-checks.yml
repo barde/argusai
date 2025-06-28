@@ -1,0 +1,88 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  size-check:
+    name: PR Size Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR size
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const additions = pr.additions;
+            const deletions = pr.deletions;
+            const totalChanges = additions + deletions;
+            
+            let label = '';
+            let comment = '';
+            
+            if (totalChanges < 10) {
+              label = 'size/XS';
+              comment = '✅ This is a tiny PR (< 10 lines)';
+            } else if (totalChanges < 50) {
+              label = 'size/S';
+              comment = '✅ This is a small PR (< 50 lines)';
+            } else if (totalChanges < 200) {
+              label = 'size/M';
+              comment = '✅ This is a medium PR (< 200 lines)';
+            } else if (totalChanges < 500) {
+              label = 'size/L';
+              comment = '⚠️ This is a large PR (< 500 lines). Consider breaking it down.';
+            } else {
+              label = 'size/XL';
+              comment = '❌ This is an extra large PR (>= 500 lines). Please break it down into smaller PRs.';
+            }
+            
+            // Add label
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              labels: [label]
+            });
+
+  conventional-commits:
+    name: Conventional Commits Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            test
+            chore
+            perf
+            ci
+            build
+            revert
+          requireScope: false
+          subjectPattern: ^[A-Z].*$
+          subjectPatternError: |
+            The subject "{subject}" found in the pull request title "{title}"
+            should start with an uppercase letter.
+
+  pr-labeler:
+    name: Auto Label PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label PR based on paths
+        uses: actions/labeler@v5
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          configuration-path: .github/labeler.yml

@@ -20,7 +20,8 @@
     "logs": "wrangler tail",
     "logs:prod": "wrangler tail --env production",
     "kv:list": "wrangler kv:key list --binding=CACHE",
-    "kv:get": "wrangler kv:key get --binding=CACHE"
+    "kv:get": "wrangler kv:key get --binding=CACHE",
+    "prepare": "husky || true"
   },
   "keywords": [
     "github",
@@ -41,6 +42,7 @@
     "@vitest/coverage-v8": "^2.1.8",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",
+    "husky": "^9.1.7",
     "prettier": "^3.4.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8",

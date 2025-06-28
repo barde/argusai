@@ -2,6 +2,7 @@ import { Context } from 'hono';
 import type { Env } from '../types/env';
 
 export async function healthHandler(c: Context<{ Bindings: Env }>) {
+  console.log('Health check endpoint called');
   const checks = {
     status: 'healthy',
     timestamp: new Date().toISOString(),

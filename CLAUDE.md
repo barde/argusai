@@ -51,14 +51,66 @@ wrangler secret put GITHUB_TOKEN  # GitHub PAT with models:read scope
 wrangler deploy --env production
 ```
 
-### Logging
-```bash
-# View real-time logs
-wrangler tail
+### Logging and Debugging
 
-# View logs for specific environment
-wrangler tail --env production
+#### View Real-Time Logs
+```bash
+# Basic real-time logs
+wrangler tail --env development
+
+# Pretty formatted logs (human-readable with colors)
+wrangler tail --env development --format pretty
+
+# JSON formatted logs (for parsing/piping)
+wrangler tail --env development --format json
+
+# View logs for production
+wrangler tail --env production --format pretty
 ```
+
+#### Filter and Search Logs
+```bash
+# Filter by error status
+wrangler tail --env development --status error
+
+# Search for specific text (e.g., errors)
+wrangler tail --env development --search "ERROR"
+wrangler tail --env development --search "Failed"
+
+# Filter by HTTP method
+wrangler tail --env development --method POST
+
+# Apply sampling rate (e.g., 10% of logs)
+wrangler tail --env development --sampling-rate 0.1
+
+# Combine filters
+wrangler tail --env development --format pretty --search "ERROR" --method POST
+```
+
+#### Advanced Log Analysis
+```bash
+# Parse JSON logs with jq
+wrangler tail --env development --format json | jq '.logs[0].message'
+
+# Save logs to file
+wrangler tail --env development --format json > worker-logs.json
+
+# Get single log event then disconnect
+wrangler tail --env development --once
+
+# Extract specific fields from logs
+wrangler tail --env development --format json | jq -r '.logs[].message[] | select(. | contains("ERROR"))'
+
+# Monitor errors in real-time with pretty output
+wrangler tail --env development --format pretty --search "[ERROR]"
+```
+
+#### Common Log Patterns in ArgusAI
+- Webhook received: `"Webhook responded in Xms"`
+- Processing started: `"Starting review processing"`
+- Errors: Look for `[ERROR]` prefix
+- GitHub API failures: `"Failed to fetch pull request"`
+- Models API issues: `"GitHub Models API error"`
 
 ### KV Namespace Creation
 ```bash
@@ -88,10 +140,11 @@ wrangler kv:namespace create "CONFIG"
 - **CPU Time**: 10ms per request (use waitUntil for longer tasks)
 
 ### GitHub Models API
-- Endpoint: `https://api.github.com/chat/completions`
+- Endpoint: `https://models.inference.ai.azure.com/chat/completions`
 - Models: `gpt-4o`, `gpt-4o-mini`, `o1-preview`, `o1-mini`
-- Authentication: Bearer token with `models:read` permission
+- Authentication: Fine-grained personal access token with "Models" permission (read-only)
 - Rate limits: Varies by model, handle 429 responses
+- Note: Classic tokens with `models:read` scope do NOT work (as of 2025)
 
 ### Environment Variables (via wrangler.toml bindings)
 ```toml

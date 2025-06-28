@@ -79,13 +79,42 @@ export class GitHubModelsService {
           throw new Error(`Rate limited. Retry after ${retryAfter} seconds`);
         }
 
-        logger.error('GitHub Models API error', undefined, {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText
-        });
+        // Add more specific error handling
+        let errorMessage = `GitHub Models API error: ${response.status} ${response.statusText}`;
         
-        throw new Error(`GitHub Models API error: ${response.status} ${response.statusText}`);
+        if (response.status === 401) {
+          errorMessage = 'Authentication failed. Check GITHUB_TOKEN has models:read scope';
+          logger.error('GitHub Models API authentication failed', undefined, {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText,
+            hint: 'Token needs models:read scope'
+          });
+        } else if (response.status === 403) {
+          errorMessage = 'Access forbidden. Token may lack models:read permission';
+          logger.error('GitHub Models API access forbidden', undefined, {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText,
+            hint: 'Check token permissions'
+          });
+        } else if (response.status === 413) {
+          errorMessage = '413 Payload Too Large';
+          logger.error('GitHub Models API payload too large', undefined, {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText,
+            hint: 'Diff is too large, needs chunking'
+          });
+        } else {
+          logger.error('GitHub Models API error', undefined, {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText
+          });
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await response.json() as ModelResponse;

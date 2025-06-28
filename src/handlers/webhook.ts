@@ -16,6 +16,13 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
       'x-github-event': c.req.header('x-github-event'),
       'x-github-delivery': c.req.header('x-github-delivery'),
     };
+    
+    console.log('=== WEBHOOK RECEIVED ===', {
+      event: headers['x-github-event'],
+      delivery: headers['x-github-delivery'],
+      hasSignature: !!headers['x-hub-signature-256'],
+      timestamp: new Date().toISOString()
+    });
 
     // Validate webhook signature
     const body = await c.req.text();
@@ -26,16 +33,34 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
     );
 
     if (!isValid) {
+      console.error('=== WEBHOOK SIGNATURE FAILED ===', {
+        hasSignature: !!headers['x-hub-signature-256'],
+        hasSecret: !!c.env.GITHUB_WEBHOOK_SECRET,
+        secretLength: c.env.GITHUB_WEBHOOK_SECRET?.length || 0,
+        delivery: headers['x-github-delivery']
+      });
       return c.json({ error: 'Invalid signature' }, 401);
     }
+    
+    console.log('=== WEBHOOK SIGNATURE VALID ===');
 
     // Parse payload
     const payload = JSON.parse(body) as PullRequestEvent;
     const eventType = headers['x-github-event'];
     const deliveryId = headers['x-github-delivery'] || crypto.randomUUID();
+    
+    console.log('=== WEBHOOK PAYLOAD ===', {
+      event: eventType,
+      action: payload.action,
+      pr: payload.pull_request?.number,
+      repo: payload.repository?.full_name,
+      draft: payload.pull_request?.draft,
+      installation: payload.installation?.id
+    });
 
     // Only process pull request events
     if (eventType !== 'pull_request') {
+      console.log('=== EVENT IGNORED (not PR) ===', { eventType });
       return c.json({ message: 'Event ignored' }, 200);
     }
 
@@ -69,20 +94,35 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
       return c.json({ error: 'Rate limit exceeded' }, 429);
     }
 
+    // Save webhook info for debugging
+    const { saveDebugWebhook } = await import('./debug');
+    await saveDebugWebhook(c.env, payload);
+    
     // Process the review asynchronously using event.waitUntil
     // This allows us to return a response immediately while processing continues
     // Return response immediately for fast webhook processing
     // The actual review processing happens asynchronously with retry logic
     c.executionCtx.waitUntil(
-      processReviewWithRetry(c.env, payload, deliveryId)
+      processReviewWithRetry(c.env, payload, deliveryId).catch(async (error) => {
+        console.error('=== ASYNC PROCESSING ERROR ===', error);
+        const { saveDebugError } = await import('./debug');
+        await saveDebugError(c.env, error, {
+          event: 'webhook_async_error',
+          payload: {
+            action: payload.action,
+            pr: payload.pull_request?.number,
+            repo: payload.repository?.full_name
+          }
+        });
+      })
     );
 
     // Log webhook response time (should be <50ms)
     const processingTime = Date.now() - startTime;
     console.log(`Webhook responded in ${processingTime}ms`, {
-      repository: reviewData.repository,
-      pr: reviewData.prNumber,
-      action: reviewData.action,
+      repository: payload.repository.full_name,
+      pr: payload.pull_request.number,
+      action: payload.action,
       deliveryId,
     });
 

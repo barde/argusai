@@ -6,6 +6,8 @@ compatibility_flags = ["nodejs_compat"]
 # Development environment
 [env.development]
 name = "argusai-dev"
+[env.development.observability]
+enabled = true
 [env.development.vars]
 ENVIRONMENT = "development"
 GITHUB_APP_ID = "1454778"
@@ -83,6 +85,6 @@ id = "f28a375dc99b45c8905e0d7016544a13"
 [env.production.performance]
 cpu_ms = 50  # Limit CPU time per request
 
-# Logpush (optional)
-# [env.production.logpush]
-# enabled = true
+# Logpush configuration for better log collection
+# Note: Logpush requires enterprise plan
+# For free tier, use wrangler tail for real-time logs

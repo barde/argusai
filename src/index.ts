@@ -7,6 +7,7 @@ import { configHandler } from './handlers/config';
 import { debugHandler } from './handlers/debug';
 import { testAuthHandler } from './handlers/test-auth';
 import { testReviewHandler } from './handlers/test-review';
+import { statusHandler } from './handlers/status';
 import type { Env } from './types/env';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -17,6 +18,14 @@ app.use('/api/*', cors());
 
 // Health check endpoint
 app.get('/health', healthHandler);
+
+// Status endpoint - shows connection status and model quotas
+app.get('/status', statusHandler);
+// Status page (HTML by default)
+app.get('/status-page', (c) => {
+  c.req.query = () => 'html'; // Force HTML format
+  return statusHandler(c);
+});
 
 // Debug endpoint (development only)
 app.get('/debug', (c) => {

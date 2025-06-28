@@ -13,6 +13,8 @@ ENVIRONMENT = "development"
 GITHUB_APP_ID = "1454778"
 GITHUB_MODEL = "gpt-4o-mini"
 LOG_LEVEL = "debug"
+MAX_DIFF_SIZE = "500000"  # 500KB default
+CONCURRENT_FILE_REVIEWS = "3"  # Review 3 files in parallel
 
 # Production environment
 [env.production]
@@ -25,6 +27,8 @@ ENVIRONMENT = "production"
 GITHUB_APP_ID = "your-prod-app-id"
 GITHUB_MODEL = "gpt-4o"
 LOG_LEVEL = "info"
+MAX_DIFF_SIZE = "500000"  # 500KB default
+CONCURRENT_FILE_REVIEWS = "3"  # Review 3 files in parallel
 
 # KV Namespaces (create with: wrangler kv:namespace create "NAME")
 [[env.production.kv_namespaces]]

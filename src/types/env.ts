@@ -12,6 +12,10 @@ export interface Env {
   SENTRY_DSN?: string;
   SLACK_WEBHOOK_URL?: string;
 
+  // Chunking configuration
+  MAX_DIFF_SIZE?: string; // Maximum diff size before switching to chunked review (default: 500KB)
+  CONCURRENT_FILE_REVIEWS?: string; // Number of files to review in parallel (default: 3)
+
   // KV Namespaces
   CACHE: KVNamespace;
   RATE_LIMITS: KVNamespace;

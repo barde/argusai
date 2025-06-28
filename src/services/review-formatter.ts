@@ -85,7 +85,8 @@ export class ReviewFormatter {
     let bugs = 0;
     const mainIssues: string[] = [];
     const positives: string[] = [];
-    const fileResults: Array<{filename: string, verdict: string, issues: number}> = [];
+    const fileResults: Array<{filename: string, verdict: string, issues: number, review: any}> = [];
+    const allComments: ReviewComment[] = [];
     
     fileReviews.forEach(review => {
       const fileName = review.split('\n')[0].trim();
@@ -93,7 +94,7 @@ export class ReviewFormatter {
       
       // Skip files that were too large
       if (review.includes('⚠️ File too large')) {
-        fileResults.push({filename: fileName, verdict: 'skipped', issues: 0});
+        fileResults.push({filename: fileName, verdict: 'skipped', issues: 0, review: null});
         return;
       }
       
@@ -116,7 +117,7 @@ export class ReviewFormatter {
               });
             }
             
-            fileResults.push({filename: fileName, verdict, issues: fileIssues});
+            fileResults.push({filename: fileName, verdict, issues: fileIssues, review: parsed});
             
             // Extract positives and issues
             if (parsed.summary.positives) {
@@ -129,6 +130,24 @@ export class ReviewFormatter {
                 if (!mainIssues.includes(issue)) mainIssues.push(issue);
               });
             }
+            
+            // Extract comments for line-by-line suggestions
+            if (parsed.comments && Array.isArray(parsed.comments)) {
+              parsed.comments.forEach((comment: any) => {
+                allComments.push({
+                  path: fileName,
+                  line: comment.line || 1,
+                  side: 'RIGHT' as const,
+                  body: this.formatCommentBody(comment, 
+                    {critical: '🔴', important: '🟡', minor: '🟢'},
+                    {bug: '🐛', security: '🔒', performance: '⚡', style: '✨', improvement: '💡'}
+                  ),
+                  severity: comment.severity === 'critical' ? 'error' : 
+                           comment.severity === 'important' ? 'warning' : 'info',
+                  category: comment.category
+                });
+              });
+            }
           }
         }
       } catch (e) {
@@ -136,9 +155,9 @@ export class ReviewFormatter {
         if (review.toLowerCase().includes('critical') || 
             review.toLowerCase().includes('security')) {
           requestChangesCount++;
-          fileResults.push({filename: fileName, verdict: 'request_changes', issues: 1});
+          fileResults.push({filename: fileName, verdict: 'request_changes', issues: 1, review: null});
         } else {
-          fileResults.push({filename: fileName, verdict: 'comment', issues: 0});
+          fileResults.push({filename: fileName, verdict: 'comment', issues: 0, review: null});
         }
       }
     });
@@ -181,7 +200,7 @@ export class ReviewFormatter {
         mainIssues: mainIssues.length > 0 ? mainIssues : ['Review completed'],
         positives: positives.length > 0 ? positives : [`Successfully reviewed ${reviewedCount} files`]
       },
-      comments: [],
+      comments: allComments,
       overallFeedback: formattedFeedback
     };
   }
@@ -192,7 +211,7 @@ export class ReviewFormatter {
     filesCount: number;
     reviewedCount: number;
     skippedCount: number;
-    fileResults: Array<{filename: string, verdict: string, issues: number}>;
+    fileResults: Array<{filename: string, verdict: string, issues: number, review: any}>;
     verdict: string;
     criticalIssues: number;
     securityIssues: number;
@@ -300,6 +319,108 @@ export class ReviewFormatter {
       markdown += `> Please review the feedback and make improvements where appropriate.\n\n`;
     }
     
+    // Add detailed file reviews section
+    markdown += `### 📝 Detailed Review\n\n`;
+    
+    // Group files by verdict for better organization
+    const criticalFiles = data.fileResults.filter(f => f.verdict === 'request_changes' && f.review);
+    const warningFiles = data.fileResults.filter(f => f.verdict === 'comment' && f.review);
+    const approvedFiles = data.fileResults.filter(f => f.verdict === 'approve' && f.review);
+    
+    if (criticalFiles.length > 0) {
+      markdown += `#### ❌ Files Requiring Changes\n\n`;
+      criticalFiles.forEach(file => {
+        markdown += this.formatFileReview(file);
+      });
+    }
+    
+    if (warningFiles.length > 0) {
+      markdown += `#### ⚠️ Files with Suggestions\n\n`;
+      warningFiles.forEach(file => {
+        markdown += this.formatFileReview(file);
+      });
+    }
+    
+    if (approvedFiles.length > 0) {
+      markdown += `<details>\n<summary>✅ Approved Files (${approvedFiles.length})</summary>\n\n`;
+      approvedFiles.forEach(file => {
+        markdown += this.formatFileReview(file);
+      });
+      markdown += `</details>\n\n`;
+    }
+    
+    return markdown;
+  }
+  
+  private static formatFileReview(file: {filename: string, verdict: string, issues: number, review: any}): string {
+    let markdown = `<details>\n<summary><b>${file.filename}</b>`;
+    
+    if (file.issues > 0) {
+      markdown += ` - ${file.issues} issue${file.issues > 1 ? 's' : ''}`;
+    }
+    
+    markdown += `</summary>\n\n`;
+    
+    if (!file.review) {
+      markdown += `> ⚠️ Review data not available\n\n`;
+      markdown += `</details>\n\n`;
+      return markdown;
+    }
+    
+    // Add overall feedback for the file
+    if (file.review.overallFeedback) {
+      markdown += `**Overall Assessment:**\n${file.review.overallFeedback}\n\n`;
+    }
+    
+    // Add summary points
+    if (file.review.summary) {
+      if (file.review.summary.positives && file.review.summary.positives.length > 0) {
+        markdown += `**✅ What looks good:**\n`;
+        file.review.summary.positives.forEach((positive: string) => {
+          markdown += `- ${positive}\n`;
+        });
+        markdown += `\n`;
+      }
+      
+      if (file.review.summary.mainIssues && file.review.summary.mainIssues.length > 0) {
+        markdown += `**🔍 Issues found:**\n`;
+        file.review.summary.mainIssues.forEach((issue: string) => {
+          markdown += `- ${issue}\n`;
+        });
+        markdown += `\n`;
+      }
+    }
+    
+    // Add specific line comments
+    if (file.review.comments && file.review.comments.length > 0) {
+      markdown += `**📍 Line-by-line feedback:**\n\n`;
+      
+      const severityEmoji: Record<string, string> = {
+        critical: '🔴',
+        important: '🟡',
+        minor: '🟢'
+      };
+      
+      const categoryEmoji: Record<string, string> = {
+        bug: '🐛',
+        security: '🔒',
+        performance: '⚡',
+        style: '✨',
+        improvement: '💡'
+      };
+      
+      file.review.comments.forEach((comment: any) => {
+        markdown += `**Line ${comment.line}:** ${severityEmoji[comment.severity] || '💭'} ${categoryEmoji[comment.category] || ''} ${comment.message}\n`;
+        
+        if (comment.suggestion) {
+          markdown += `\n\`\`\`suggestion\n${comment.suggestion}\n\`\`\`\n`;
+        }
+        
+        markdown += `\n`;
+      });
+    }
+    
+    markdown += `</details>\n\n`;
     return markdown;
   }
 

@@ -3,6 +3,7 @@
 [![API Documentation](https://img.shields.io/badge/API-Swagger-85EA2D?logo=swagger)](https://editor.swagger.io/?url=https://raw.githubusercontent.com/barde/argusai/master/argusai-openapi.yaml)
 [![Platform](https://img.shields.io/badge/Platform-Cloudflare_Workers-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Page-brightgreen)](https://api.argusai.dev/status-page)
 
 Intelligent GitHub code review bot powered by LLMs, deployed on Cloudflare Workers edge network for instant, global PR analysis.
 
@@ -20,6 +21,19 @@ Intelligent GitHub code review bot powered by LLMs, deployed on Cloudflare Worke
 - [**API Documentation**](https://editor.swagger.io/?url=https://raw.githubusercontent.com/barde/argusai/master/argusai-openapi.yaml) - Interactive OpenAPI specification
 - [**Architecture Overview**](github-llm-code-review-bot.md) - Detailed technical documentation
 - [**API Reference**](API.md) - Quick API endpoint reference
+
+## 🔍 Monitoring & Status
+
+### Production Instance
+- **Status Page**: [https://api.argusai.dev/status-page](https://api.argusai.dev/status-page) - Visual health dashboard
+- **Status API**: [https://api.argusai.dev/status](https://api.argusai.dev/status) - JSON status endpoint
+- **Health Check**: [https://api.argusai.dev/health](https://api.argusai.dev/health) - Simple health endpoint
+
+### Local Development
+When running locally with `wrangler dev`:
+- **Status Page**: [http://localhost:8787/status-page](http://localhost:8787/status-page)
+- **Status API**: [http://localhost:8787/status](http://localhost:8787/status)
+- **Health Check**: [http://localhost:8787/health](http://localhost:8787/health)
 
 ## 🎯 Quick Start
 

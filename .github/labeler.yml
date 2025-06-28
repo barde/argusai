@@ -1,0 +1,46 @@
+# Add labels based on file paths
+documentation:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*.md'
+      - 'docs/**'
+      - '*.md'
+
+infrastructure:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'infrastructure/**'
+      - 'wrangler.toml'
+      - '.github/**'
+
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'package.json'
+      - 'package-lock.json'
+
+tests:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tests/**'
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+      - 'vitest.config.ts'
+
+source:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/**'
+
+api:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/handlers/**'
+      - 'argusai-openapi.yaml'
+
+llm:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/services/llm.ts'
+      - 'src/services/github-models.ts'
+      - 'src/prompts/**'

@@ -18,7 +18,13 @@ app.use('/api/*', cors());
 
 // Root endpoint - status page (HTML by default)
 app.get('/', (c) => {
-  c.req.query = () => 'html'; // Force HTML format
+  // Override the query function to return 'html' for format
+  const originalQuery = c.req.query.bind(c.req);
+  c.req.query = ((key?: string) => {
+    if (key === 'format') return 'html';
+    if (!key) return { format: 'html' } as any;
+    return originalQuery(key);
+  }) as any;
   return statusHandler(c);
 });
 

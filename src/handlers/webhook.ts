@@ -16,12 +16,12 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
       'x-github-event': c.req.header('x-github-event'),
       'x-github-delivery': c.req.header('x-github-delivery'),
     };
-    
+
     console.log('=== WEBHOOK RECEIVED ===', {
       event: headers['x-github-event'],
       delivery: headers['x-github-delivery'],
       hasSignature: !!headers['x-hub-signature-256'],
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     // Validate webhook signature
@@ -37,25 +37,25 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
         hasSignature: !!headers['x-hub-signature-256'],
         hasSecret: !!c.env.GITHUB_WEBHOOK_SECRET,
         secretLength: c.env.GITHUB_WEBHOOK_SECRET?.length || 0,
-        delivery: headers['x-github-delivery']
+        delivery: headers['x-github-delivery'],
       });
       return c.json({ error: 'Invalid signature' }, 401);
     }
-    
+
     console.log('=== WEBHOOK SIGNATURE VALID ===');
 
     // Parse payload
     const payload = JSON.parse(body) as PullRequestEvent;
     const eventType = headers['x-github-event'];
     const deliveryId = headers['x-github-delivery'] || crypto.randomUUID();
-    
+
     console.log('=== WEBHOOK PAYLOAD ===', {
       event: eventType,
       action: payload.action,
       pr: payload.pull_request?.number,
       repo: payload.repository?.full_name,
       draft: payload.pull_request?.draft,
-      installation: payload.installation?.id
+      installation: payload.installation?.id,
     });
 
     // Only process pull request events
@@ -97,7 +97,7 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
     // Save webhook info for debugging
     const { saveDebugWebhook } = await import('./debug');
     await saveDebugWebhook(c.env, payload);
-    
+
     // Process the review asynchronously using event.waitUntil
     // This allows us to return a response immediately while processing continues
     // Return response immediately for fast webhook processing
@@ -111,8 +111,8 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
           payload: {
             action: payload.action,
             pr: payload.pull_request?.number,
-            repo: payload.repository?.full_name
-          }
+            repo: payload.repository?.full_name,
+          },
         });
       })
     );
@@ -139,4 +139,3 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
     return c.json({ error: 'Internal server error' }, 500);
   }
 }
-

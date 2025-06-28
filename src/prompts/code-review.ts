@@ -7,7 +7,7 @@ export const CODE_REVIEW_PROMPTS = {
 - Security vulnerabilities
 - Code maintainability and readability
 - Best practices and design patterns`,
-    
+
     userTemplate: (context: any) => `Review this TypeScript code change:
 Title: ${context.title}
 Description: ${context.description}
@@ -17,7 +17,7 @@ Changes:
 ${context.diff}
 \`\`\`
 
-Provide feedback in JSON format.`
+Provide feedback in JSON format.`,
   },
 
   javascript: {
@@ -27,7 +27,7 @@ Provide feedback in JSON format.`
 - Performance and memory leaks
 - Security vulnerabilities
 - Code clarity and maintainability`,
-    
+
     userTemplate: (context: any) => `Review this JavaScript code change:
 Title: ${context.title}
 Description: ${context.description}
@@ -37,7 +37,7 @@ Changes:
 ${context.diff}
 \`\`\`
 
-Provide feedback in JSON format.`
+Provide feedback in JSON format.`,
   },
 
   general: {
@@ -47,7 +47,7 @@ Provide feedback in JSON format.`
 - Performance issues
 - Code quality and maintainability
 - Best practices for the language`,
-    
+
     userTemplate: (context: any) => `Review this code change:
 Title: ${context.title}
 Description: ${context.description}
@@ -58,20 +58,20 @@ Changes:
 ${context.diff}
 \`\`\`
 
-Provide feedback in JSON format.`
-  }
+Provide feedback in JSON format.`,
+  },
 };
 
 export function getPromptForLanguage(language: string) {
   const normalizedLang = language.toLowerCase();
-  
+
   if (normalizedLang.includes('typescript') || normalizedLang.includes('tsx')) {
     return CODE_REVIEW_PROMPTS.typescript;
   }
-  
+
   if (normalizedLang.includes('javascript') || normalizedLang.includes('jsx')) {
     return CODE_REVIEW_PROMPTS.javascript;
   }
-  
+
   return CODE_REVIEW_PROMPTS.general;
 }

@@ -11,14 +11,14 @@ export async function testReviewHandler(c: Context<{ Bindings: Env }>) {
     pull_request: {
       number: 23,
       head: { sha: 'test-sha' },
-      draft: false
+      draft: false,
     },
     repository: {
-      full_name: 'barde/argusai'
+      full_name: 'barde/argusai',
     },
     installation: {
-      id: 72940228
-    }
+      id: 72940228,
+    },
   };
 
   const reviewData = {
@@ -34,27 +34,27 @@ export async function testReviewHandler(c: Context<{ Bindings: Env }>) {
 
   try {
     console.log('=== TEST REVIEW: Starting ===');
-    
+
     // Import and run the review processor
     const { processReviewAsync } = await import('../services/review-processor');
     await processReviewAsync(reviewData, c.env);
-    
+
     console.log('=== TEST REVIEW: Success ===');
-    
+
     return c.json({
       success: true,
-      message: 'Review processed successfully'
+      message: 'Review processed successfully',
     });
   } catch (error) {
     console.error('=== TEST REVIEW ERROR ===', error);
-    
+
     return c.json({
       success: false,
       error: {
         message: (error as Error).message,
         stack: (error as Error).stack,
-        details: (error as any).response?.data || (error as any).data
-      }
+        details: (error as any).response?.data || (error as any).data,
+      },
     });
   }
 }

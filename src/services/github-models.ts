@@ -26,7 +26,7 @@ export interface ChatMessage {
 export class GitHubModelsService {
   private readonly apiUrl = 'https://models.inference.ai.azure.com/chat/completions';
   private readonly model: string;
-  
+
   constructor(private env: Env) {
     this.model = env.GITHUB_MODEL || 'gpt-4o-mini';
   }
@@ -40,21 +40,21 @@ export class GitHubModelsService {
     } = {}
   ): Promise<ModelResponse> {
     const startTime = Date.now();
-    
+
     try {
       logger.info('Calling GitHub Models API', {
         model: this.model,
         messageCount: messages.length,
-        temperature: options.temperature
+        temperature: options.temperature,
       });
 
       const response = await fetch(this.apiUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.env.GITHUB_TOKEN}`,
+          Authorization: `Bearer ${this.env.GITHUB_TOKEN}`,
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-GitHub-Api-Version': '2022-11-28'
+          Accept: 'application/json',
+          'X-GitHub-Api-Version': '2022-11-28',
         },
         body: JSON.stringify({
           model: this.model,
@@ -62,33 +62,33 @@ export class GitHubModelsService {
           temperature: options.temperature ?? 0.3,
           max_tokens: options.max_tokens ?? 2000,
           top_p: options.top_p ?? 0.95,
-          stream: false
-        })
+          stream: false,
+        }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        
+
         // Handle rate limiting
         if (response.status === 429) {
           const retryAfter = response.headers.get('retry-after');
           logger.warn('Rate limited by GitHub Models API', {
             retryAfter,
-            status: response.status
+            status: response.status,
           });
           throw new Error(`Rate limited. Retry after ${retryAfter} seconds`);
         }
 
         // Add more specific error handling
         let errorMessage = `GitHub Models API error: ${response.status} ${response.statusText}`;
-        
+
         if (response.status === 401) {
           errorMessage = 'Authentication failed. Check GITHUB_TOKEN has models:read scope';
           logger.error('GitHub Models API authentication failed', undefined, {
             status: response.status,
             statusText: response.statusText,
             error: errorText,
-            hint: 'Token needs models:read scope'
+            hint: 'Token needs models:read scope',
           });
         } else if (response.status === 403) {
           errorMessage = 'Access forbidden. Token may lack models:read permission';
@@ -96,7 +96,7 @@ export class GitHubModelsService {
             status: response.status,
             statusText: response.statusText,
             error: errorText,
-            hint: 'Check token permissions'
+            hint: 'Check token permissions',
           });
         } else if (response.status === 413) {
           errorMessage = '413 Payload Too Large';
@@ -104,33 +104,33 @@ export class GitHubModelsService {
             status: response.status,
             statusText: response.statusText,
             error: errorText,
-            hint: 'Diff is too large, needs chunking'
+            hint: 'Diff is too large, needs chunking',
           });
         } else {
           logger.error('GitHub Models API error', undefined, {
             status: response.status,
             statusText: response.statusText,
-            error: errorText
+            error: errorText,
           });
         }
-        
+
         throw new Error(errorMessage);
       }
 
-      const data = await response.json() as ModelResponse;
-      
+      const data = (await response.json()) as ModelResponse;
+
       const processingTime = Date.now() - startTime;
       logger.info('GitHub Models API response received', {
         model: this.model,
         tokensUsed: data.usage.total_tokens,
         processingTime,
-        finishReason: data.choices[0]?.finish_reason
+        finishReason: data.choices[0]?.finish_reason,
       });
 
       return data;
     } catch (error) {
       logger.error('Failed to call GitHub Models API', error as Error, {
-        model: this.model
+        model: this.model,
       });
       throw error;
     }
@@ -148,16 +148,16 @@ export class GitHubModelsService {
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: this.getSystemPrompt()
+        content: this.getSystemPrompt(),
       },
       {
         role: 'user',
-        content: this.formatUserPrompt(diff, prContext)
-      }
+        content: this.formatUserPrompt(diff, prContext),
+      },
     ];
 
     const response = await this.analyzeCode(messages);
-    return response.choices[0].message.content;
+    return response.choices[0]?.message?.content || '';
   }
 
   private getSystemPrompt(): string {

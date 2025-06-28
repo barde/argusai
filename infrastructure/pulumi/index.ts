@@ -51,7 +51,7 @@ const workerScript = fs.readFileSync(
 // Worker Script
 const worker = new cloudflare.WorkerScript(`argusai-${environment}`, {
     accountId: accountId,
-    name: environment === "production" ? "argusai" : "argusai-dev",
+    name: "argusai",
     content: workerScript,
     
     // KV Namespace bindings

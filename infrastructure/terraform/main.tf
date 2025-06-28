@@ -66,12 +66,7 @@ resource "cloudflare_workers_kv_namespace" "config_prod" {
 }
 
 # Queues (requires Workers Paid plan)
-resource "cloudflare_queue" "reviews_dev" {
-  account_id = var.account_id
-  name       = "argusai-reviews-dev"
-}
-
-resource "cloudflare_queue" "reviews_prod" {
+resource "cloudflare_queue" "reviews" {
   account_id = var.account_id
   name       = "argusai-reviews"
 }
@@ -91,7 +86,7 @@ resource "cloudflare_queue" "reviews_dlq" {
 # Worker Script
 resource "cloudflare_worker_script" "argusai" {
   account_id = var.account_id
-  name       = var.environment == "production" ? "argusai" : "argusai-dev"
+  name       = "argusai"
   content    = file("${path.module}/../../dist/index.js")
   
   # KV Namespace bindings

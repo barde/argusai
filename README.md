@@ -1,5 +1,7 @@
 # ArgusAI
 
+[![CI](https://github.com/barde/argusai/actions/workflows/ci.yml/badge.svg)](https://github.com/barde/argusai/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/barde/argusai/actions/workflows/codeql.yml/badge.svg)](https://github.com/barde/argusai/actions/workflows/codeql.yml)
 [![API Documentation](https://img.shields.io/badge/API-Swagger-85EA2D?logo=swagger)](https://editor.swagger.io/?url=https://raw.githubusercontent.com/barde/argusai/master/argusai-openapi.yaml)
 [![Platform](https://img.shields.io/badge/Platform-Cloudflare_Workers-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)

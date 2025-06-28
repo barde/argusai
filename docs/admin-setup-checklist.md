@@ -53,7 +53,7 @@ openssl rand -hex 32
 
 ## Step 6: Create KV Namespaces
 
-### Development namespaces:
+### Create KV namespaces:
 ```bash
 wrangler kv:namespace create "CACHE"
 # Output: Created namespace with ID: xxxxxxxxxx
@@ -72,22 +72,6 @@ wrangler kv:namespace create "CONFIG"
 ```
 - [ ] **CONFIG namespace ID**: _________________
 
-### Production namespaces:
-```bash
-wrangler kv:namespace create "CACHE" --env production
-```
-- [ ] **Production CACHE namespace ID**: _________________
-
-```bash
-wrangler kv:namespace create "RATE_LIMITS" --env production
-```
-- [ ] **Production RATE_LIMITS namespace ID**: _________________
-
-```bash
-wrangler kv:namespace create "CONFIG" --env production
-```
-- [ ] **Production CONFIG namespace ID**: _________________
-
 ## Step 7: Create Queue (Skip if Using Free Tier)
 
 **Note**: Queues require a Workers Paid plan. If you're using the free tier architecture, skip this step and refer to the [free tier architecture guide](../ARCHITECTURE-FREE-TIER.md).
@@ -102,10 +86,10 @@ wrangler queues create argusai-reviews
 
 Edit `wrangler.toml` and replace the placeholder values:
 
-### Development environment:
 ```toml
 [vars]
 GITHUB_APP_ID = "[Your App ID from Step 3]"
+ENVIRONMENT = "production"
 
 [[kv_namespaces]]
 binding = "CACHE"
@@ -120,24 +104,6 @@ binding = "CONFIG"
 id = "[Your CONFIG namespace ID from Step 6]"
 ```
 
-### Production environment:
-```toml
-[env.production.vars]
-GITHUB_APP_ID = "[Your App ID from Step 3]"
-
-[[env.production.kv_namespaces]]
-binding = "CACHE"
-id = "[Your Production CACHE namespace ID from Step 6]"
-
-[[env.production.kv_namespaces]]
-binding = "RATE_LIMITS"
-id = "[Your Production RATE_LIMITS namespace ID from Step 6]"
-
-[[env.production.kv_namespaces]]
-binding = "CONFIG"
-id = "[Your Production CONFIG namespace ID from Step 6]"
-```
-
 ## Step 9: Build and Deploy (Required Before Setting Secrets)
 
 **Important**: You must build and deploy the Worker first before you can add secrets to it.
@@ -147,14 +113,9 @@ id = "[Your Production CONFIG namespace ID from Step 6]"
 npm run build
 ```
 
-### Development deployment:
+### Deploy to production:
 ```bash
-wrangler deploy --env development
-```
-
-### Production deployment:
-```bash
-wrangler deploy --env production
+wrangler deploy
 ```
 
 **Note**: If you encounter TypeScript errors during build, ensure all dependencies are installed with `npm install`.
@@ -163,33 +124,23 @@ wrangler deploy --env production
 
 Now that the Workers exist, you can add secrets to them:
 
-### For development environment:
+### Set secrets:
 ```bash
 # Set the GitHub App private key (paste the entire .pem file contents)
-wrangler secret put GITHUB_APP_PRIVATE_KEY --env development
+wrangler secret put GITHUB_APP_PRIVATE_KEY
 
 # Set the webhook secret (from Step 4)
-wrangler secret put GITHUB_WEBHOOK_SECRET --env development
+wrangler secret put GITHUB_WEBHOOK_SECRET
 
 # Set the GitHub token (from Step 5)
-wrangler secret put GITHUB_TOKEN --env development
+wrangler secret put GITHUB_TOKEN
 ```
-
-### For production environment:
-```bash
-wrangler secret put GITHUB_APP_PRIVATE_KEY --env production
-wrangler secret put GITHUB_WEBHOOK_SECRET --env production
-wrangler secret put GITHUB_TOKEN --env production
-```
-
-**Note**: If you see a warning about multiple environments, always specify the environment with `--env development` or `--env production`.
 
 ## Step 11: Update GitHub App Webhook URL
 
 1. Go to your GitHub App settings
-2. Update the Webhook URL to your Cloudflare Workers URL:
-   - Development: `https://argusai-dev.[your-subdomain].workers.dev/webhooks/github`
-   - Production: `https://argusai.[your-domain].com/webhooks/github`
+2. Update the Webhook URL to your production URL:
+   - `https://argus.vogel.yoga/webhooks/github`
 
 ## Step 12: Install GitHub App
 
@@ -202,13 +153,11 @@ wrangler secret put GITHUB_TOKEN --env production
 ### Error Tracking (Sentry)
 ```bash
 wrangler secret put SENTRY_DSN
-wrangler secret put SENTRY_DSN --env production
 ```
 
 ### Slack Notifications
 ```bash
 wrangler secret put SLACK_WEBHOOK_URL
-wrangler secret put SLACK_WEBHOOK_URL --env production
 ```
 
 ## Verification

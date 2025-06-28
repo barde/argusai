@@ -15,7 +15,7 @@ This guide walks you through testing ArgusAI on your own GitHub repository.
 #### 1. Check Worker Health
 
 ```bash
-curl https://argusai-dev.meise.workers.dev/health
+curl https://argus.vogel.yoga/health
 ```
 
 Expected response:
@@ -94,7 +94,7 @@ GITHUB_WEBHOOK_SECRET=your-webhook-secret node generate-signature.js
 #### 4. Send Test Webhook
 
 ```bash
-curl -X POST https://argusai-dev.meise.workers.dev/webhooks/github \
+curl -X POST https://argus.vogel.yoga/webhooks/github \
   -H "Content-Type: application/json" \
   -H "X-GitHub-Event: pull_request" \
   -H "X-GitHub-Delivery: test-delivery-$(date +%s)" \
@@ -115,7 +115,7 @@ curl -X POST https://argusai-dev.meise.workers.dev/webhooks/github \
 #### 2. Configure Webhook URL
 
 In your GitHub App settings:
-- **Webhook URL**: `https://argusai-dev.meise.workers.dev/webhooks/github`
+- **Webhook URL**: `https://argus.vogel.yoga/webhooks/github`
 - **Webhook secret**: Your configured secret
 
 #### 3. Create a Test Pull Request
@@ -186,8 +186,7 @@ Use the ngrok URL (e.g., `https://abc123.ngrok.io/webhooks/github`)
 
 ```bash
 # Real-time logs
-wrangler tail --env development
-
+wrangler tail 
 # Filter for errors
 wrangler tail --env development --search "ERROR"
 
@@ -199,14 +198,11 @@ wrangler tail --env development --search "PR-123"
 
 ```bash
 # List all cache entries
-wrangler kv:key list --binding=CACHE --env=development
-
+wrangler kv:key list --binding=CACHE 
 # Get specific review from cache
-wrangler kv:key get --binding=CACHE "review:owner/repo:1:abc123" --env=development
-
+wrangler kv:key get --binding=CACHE "review:owner/repo:1:abc123" 
 # Check rate limits
-wrangler kv:key list --binding=RATE_LIMITS --env=development
-```
+wrangler kv:key list --binding=RATE_LIMITS ```
 
 ## Expected Behavior
 
@@ -231,7 +227,7 @@ When a PR is opened or updated, ArgusAI should:
 
 2. Verify worker is running:
 ```bash
-curl https://argusai-dev.meise.workers.dev/health
+curl https://argus.vogel.yoga/health
 ```
 
 3. Check logs for errors:
@@ -244,11 +240,9 @@ wrangler tail --env development --search "ERROR"
 1. Verify webhook secret matches:
 ```bash
 # List secrets
-wrangler secret list --env development
-
+wrangler secret list 
 # Re-set if needed
-wrangler secret put GITHUB_WEBHOOK_SECRET --env development
-```
+wrangler secret put GITHUB_WEBHOOK_SECRET ```
 
 ### Rate Limit Errors
 
@@ -322,7 +316,7 @@ function calculate(a: number, b: number) {  // Should specify return type
 
 Create or update repository config:
 ```bash
-curl -X PUT https://argusai-dev.meise.workers.dev/config/your-username/your-repo \
+curl -X PUT https://argus.vogel.yoga/config/your-username/your-repo \
   -H "Content-Type: application/json" \
   -d '{
     "enabled": true,
@@ -335,7 +329,7 @@ curl -X PUT https://argusai-dev.meise.workers.dev/config/your-username/your-repo
 ### Disable for Specific Repository
 
 ```bash
-curl -X PUT https://argusai-dev.meise.workers.dev/config/your-username/your-repo \
+curl -X PUT https://argus.vogel.yoga/config/your-username/your-repo \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 ```
@@ -346,7 +340,7 @@ After successful testing:
 
 1. **Deploy to Production**:
 ```bash
-wrangler deploy --env production
+wrangler deploy
 ```
 
 2. **Update GitHub App**:

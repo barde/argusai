@@ -1,5 +1,5 @@
 export interface StorageKey {
-  namespace: 'review' | 'rate' | 'config' | 'dedup' | 'debug' | 'history' | 'status';
+  namespace: 'review' | 'rate' | 'config' | 'dedup' | 'debug' | 'history' | 'status' | 'thread';
   key: string;
   ttl?: number;
 }
@@ -85,6 +85,28 @@ export interface StorageMetrics {
   lastUpdated: number;
 }
 
+// Comment threading support
+export interface CommentThread {
+  id: string;
+  repository: string;
+  prNumber: number;
+  originalCommentId: number;
+  originalCommentBody: string;
+  replies: Array<{
+    id: number;
+    body: string;
+    createdAt: string;
+    isArgusAI: boolean;
+  }>;
+  resolved: boolean;
+  lastActivity: number;
+  metadata?: {
+    file?: string;
+    line?: number;
+    severity?: string;
+  };
+}
+
 export type StorageValue =
   | ReviewData
   | ReviewStatus
@@ -93,7 +115,8 @@ export type StorageValue =
   | RepositoryConfig
   | DeduplicationData
   | DebugData
-  | StorageMetrics;
+  | StorageMetrics
+  | CommentThread;
 
 export interface StorageOptions {
   ttl?: number;

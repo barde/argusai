@@ -16,6 +16,9 @@ export interface Env {
   MAX_DIFF_SIZE?: string; // Maximum diff size before switching to chunked review (default: 500KB)
   CONCURRENT_FILE_REVIEWS?: string; // Number of files to review in parallel (default: 3)
 
+  // Comment configuration
+  UPDATE_EXISTING_REVIEWS?: string; // Whether to update existing reviews or create new ones (default: true)
+
   // KV Namespaces
   CACHE: KVNamespace;
   RATE_LIMITS: KVNamespace;

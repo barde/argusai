@@ -21,7 +21,21 @@ interface AIReviewResponse {
   overallFeedback: string;
 }
 
+export interface SplitReviewResult {
+  mainReview: string;
+  continuationComments: string[];
+}
+
 export class ReviewFormatter {
+  // GitHub's maximum comment size limit
+  static readonly GITHUB_COMMENT_LIMIT = 65536;
+
+  // Reserve space for continuation notice
+  static readonly CONTINUATION_BUFFER = 200;
+
+  // Maximum number of continuation comments
+  static readonly MAX_CONTINUATION_COMMENTS = 5;
+
   static parseAIResponse(responseText: string): AIReviewResponse {
     // Check if this is markdown from chunking mode
     if (responseText.startsWith('## 🔍 PR Review Summary')) {
@@ -465,6 +479,12 @@ export class ReviewFormatter {
       model: string;
       tokensUsed: number;
       processingTime: number;
+      reviewIteration?: number;
+      previousReviewId?: number;
+      chunked?: boolean;
+      filesAnalyzed?: number;
+      filesSkipped?: number;
+      diffSize?: number;
     }
   ): Review {
     const severityEmoji = {
@@ -516,6 +536,18 @@ export class ReviewFormatter {
         tokensUsed: metadata.tokensUsed,
         processingTime: metadata.processingTime,
         reviewVersion: '1.0.0',
+        reviewIteration: metadata.reviewIteration,
+        previousReviewId: metadata.previousReviewId,
+        features:
+          metadata.chunked !== undefined
+            ? {
+                chunked: metadata.chunked,
+                filesAnalyzed: metadata.filesAnalyzed || 0,
+                filesSkipped: metadata.filesSkipped || 0,
+              }
+            : undefined,
+        timestamp: Date.now(),
+        diffSize: metadata.diffSize,
       },
     };
   }
@@ -536,7 +568,17 @@ export class ReviewFormatter {
 
   private static formatReviewBody(
     aiResponse: AIReviewResponse,
-    metadata: { model: string; tokensUsed: number; processingTime: number }
+    metadata: {
+      model: string;
+      tokensUsed: number;
+      processingTime: number;
+      reviewIteration?: number;
+      previousReviewId?: number;
+      chunked?: boolean;
+      filesAnalyzed?: number;
+      filesSkipped?: number;
+      diffSize?: number;
+    }
   ): string {
     const { summary } = aiResponse;
     const verdictEmoji = {
@@ -595,7 +637,20 @@ export class ReviewFormatter {
     body += `---\n`;
     body += `<sub>🤖 Reviewed by ArgusAI using ${metadata.model} • `;
     body += `⚡ ${metadata.processingTime}ms • `;
-    body += `🎯 ${metadata.tokensUsed} tokens</sub>`;
+    body += `🎯 ${metadata.tokensUsed} tokens`;
+
+    if (metadata.reviewIteration && metadata.reviewIteration > 1) {
+      body += ` • 🔄 Review #${metadata.reviewIteration}`;
+    }
+
+    if (metadata.chunked) {
+      body += ` • 📊 ${metadata.filesAnalyzed || 0} files analyzed`;
+      if ((metadata.filesSkipped || 0) > 0) {
+        body += `, ${metadata.filesSkipped} skipped`;
+      }
+    }
+
+    body += `</sub>`;
 
     return body;
   }
@@ -624,5 +679,130 @@ export class ReviewFormatter {
       logger.error('Review validation failed', error as Error);
       return false;
     }
+  }
+
+  /**
+   * Validates if a comment body exceeds GitHub's size limit
+   */
+  static isCommentTooLarge(body: string): boolean {
+    return body.length > this.GITHUB_COMMENT_LIMIT;
+  }
+
+  /**
+   * Splits a large review into main review and continuation comments
+   */
+  static splitLargeReview(reviewBody: string): SplitReviewResult {
+    if (!this.isCommentTooLarge(reviewBody)) {
+      return {
+        mainReview: reviewBody,
+        continuationComments: [],
+      };
+    }
+
+    const maxLength = this.GITHUB_COMMENT_LIMIT - this.CONTINUATION_BUFFER;
+    const continuationComments: string[] = [];
+
+    // Try to split at natural boundaries (paragraphs, sections)
+    const sections = reviewBody.split(/\n\n+/);
+    let currentContent = '';
+    let isMainReview = true;
+
+    for (const section of sections) {
+      const sectionWithSeparator = section + '\n\n';
+
+      // Check if adding this section would exceed the limit
+      if ((currentContent + sectionWithSeparator).length > maxLength) {
+        // Save current content
+        if (isMainReview) {
+          // Add continuation notice to main review
+          currentContent +=
+            "\n\n---\n\n📋 **Note**: This review exceeds GitHub's comment size limit. See continuation in follow-up comments below.";
+          isMainReview = false;
+        }
+
+        if (continuationComments.length >= this.MAX_CONTINUATION_COMMENTS) {
+          // We've hit the maximum number of continuation comments
+          currentContent +=
+            '\n\n⚠️ **Review truncated**: Additional content omitted due to size constraints.';
+          break;
+        }
+
+        continuationComments.push(currentContent);
+        currentContent = this.createContinuationHeader(continuationComments.length + 1);
+      }
+
+      currentContent += sectionWithSeparator;
+    }
+
+    // Handle remaining content
+    if (currentContent.trim()) {
+      if (isMainReview) {
+        // The entire review fits in the main comment
+        return {
+          mainReview: currentContent.trim(),
+          continuationComments: [],
+        };
+      } else {
+        continuationComments.push(currentContent.trim());
+      }
+    }
+
+    // Extract the main review from the first continuation comment if needed
+    const mainReview = continuationComments.shift() || '';
+
+    return {
+      mainReview,
+      continuationComments,
+    };
+  }
+
+  /**
+   * Creates a header for continuation comments
+   */
+  private static createContinuationHeader(partNumber: number): string {
+    return (
+      `## 📋 Review Continuation (Part ${partNumber})\n\n` +
+      `*This is a continuation of the code review from the previous comment.*\n\n`
+    );
+  }
+
+  /**
+   * Truncates a comment to fit within GitHub's size limit
+   */
+  static truncateComment(body: string, preserveLines: number = 100): string {
+    if (!this.isCommentTooLarge(body)) {
+      return body;
+    }
+
+    const lines = body.split('\n');
+    const truncationNotice =
+      '\n\n---\n\n⚠️ **Comment truncated**: This review was too large to display in full. ' +
+      'The most important findings are shown above.';
+
+    // Calculate how many characters we can use
+    const maxLength =
+      this.GITHUB_COMMENT_LIMIT - truncationNotice.length - this.CONTINUATION_BUFFER;
+
+    // Try to preserve the most important parts (header and first N lines)
+    let truncatedContent = '';
+    let lineCount = 0;
+
+    for (const line of lines) {
+      if ((truncatedContent + line + '\n').length > maxLength) {
+        break;
+      }
+      truncatedContent += line + '\n';
+      lineCount++;
+
+      if (lineCount >= preserveLines) {
+        // We've preserved enough lines, now try to find a good cutoff point
+        const remainingSpace = maxLength - truncatedContent.length;
+        if (remainingSpace < 1000) {
+          break;
+        }
+      }
+    }
+
+    return truncatedContent.trim() + truncationNotice;
   }
 }

@@ -364,8 +364,14 @@ export async function processReviewAsync(reviewData: ReviewData, env: Env): Prom
       processingTime: analysisTime,
     });
 
-    // Step 7: Post review to GitHub
-    logger.info('Posting review to GitHub');
+    // Step 7: Check for existing review and post/update
+    logger.info('Checking for existing review');
+    const existingReview = await githubAPI.findExistingArgusReview(
+      owner || '',
+      repo || '',
+      reviewData.prNumber
+    );
+
     const reviewEvent =
       aiResponse.summary.verdict === 'approve'
         ? 'APPROVE'
@@ -373,15 +379,34 @@ export async function processReviewAsync(reviewData: ReviewData, env: Env): Prom
           ? 'REQUEST_CHANGES'
           : 'COMMENT';
 
-    await githubAPI.createReview(owner || '', repo || '', reviewData.prNumber, {
+    const reviewPayload = {
       body: review.body,
-      event: reviewEvent,
+      event: reviewEvent as 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT',
       comments: review.comments.map((comment) => ({
         path: comment.path,
         line: comment.line,
         body: comment.body,
       })),
-    });
+    };
+
+    if (existingReview && env.UPDATE_EXISTING_REVIEWS !== 'false') {
+      logger.info('Updating existing review', { reviewId: existingReview.id });
+      await githubAPI.updateExistingReview(
+        owner || '',
+        repo || '',
+        reviewData.prNumber,
+        existingReview.id,
+        reviewPayload
+      );
+    } else {
+      logger.info('Creating new review with continuation support');
+      await githubAPI.createReviewWithContinuation(
+        owner || '',
+        repo || '',
+        reviewData.prNumber,
+        reviewPayload
+      );
+    }
 
     // Step 6: Cache the review
     try {

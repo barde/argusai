@@ -6,12 +6,12 @@ import { validateWebhookSignature } from '../utils/crypto';
 
 // Mock the crypto validation
 vi.mock('../utils/crypto', () => ({
-  validateWebhookSignature: vi.fn()
+  validateWebhookSignature: vi.fn(),
 }));
 
 // Mock the review processor
 vi.mock('../services/review-processor', () => ({
-  processReviewWithRetry: vi.fn()
+  processReviewWithRetry: vi.fn(),
 }));
 
 describe('Webhook Handler', () => {
@@ -27,27 +27,27 @@ describe('Webhook Handler', () => {
       GITHUB_APP_PRIVATE_KEY: 'test-private-key',
       GITHUB_WEBHOOK_SECRET: 'test-secret',
       GITHUB_TOKEN: 'test-token',
-      ENVIRONMENT: 'test',
+      ENVIRONMENT: 'development' as const,
       GITHUB_MODEL: 'gpt-4o-mini',
       LOG_LEVEL: 'info',
       CACHE: {
         get: vi.fn(),
         put: vi.fn(),
         delete: vi.fn(),
-        list: vi.fn()
+        list: vi.fn(),
       } as any,
       RATE_LIMITS: {
         get: vi.fn(),
         put: vi.fn(),
         delete: vi.fn(),
-        list: vi.fn()
+        list: vi.fn(),
       } as any,
       CONFIG: {
         get: vi.fn(),
         put: vi.fn(),
         delete: vi.fn(),
-        list: vi.fn()
-      } as any
+        list: vi.fn(),
+      } as any,
     };
 
     vi.clearAllMocks();
@@ -56,19 +56,23 @@ describe('Webhook Handler', () => {
   it('should reject requests with invalid signature', async () => {
     vi.mocked(validateWebhookSignature).mockResolvedValue(false);
 
-    const response = await app.request('/webhooks/github', {
-      method: 'POST',
-      headers: {
-        'x-hub-signature-256': 'invalid-signature',
-        'x-github-event': 'pull_request',
-        'x-github-delivery': 'test-delivery-id'
+    const response = await app.request(
+      '/webhooks/github',
+      {
+        method: 'POST',
+        headers: {
+          'x-hub-signature-256': 'invalid-signature',
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'test-delivery-id',
+        },
+        body: JSON.stringify({
+          action: 'opened',
+          pull_request: { number: 1 },
+          repository: { full_name: 'test/repo' },
+        }),
       },
-      body: JSON.stringify({
-        action: 'opened',
-        pull_request: { number: 1 },
-        repository: { full_name: 'test/repo' }
-      })
-    }, env);
+      env
+    );
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: 'Invalid signature' });
@@ -77,17 +81,21 @@ describe('Webhook Handler', () => {
   it('should ignore non-pull_request events', async () => {
     vi.mocked(validateWebhookSignature).mockResolvedValue(true);
 
-    const response = await app.request('/webhooks/github', {
-      method: 'POST',
-      headers: {
-        'x-hub-signature-256': 'valid-signature',
-        'x-github-event': 'push',
-        'x-github-delivery': 'test-delivery-id'
+    const response = await app.request(
+      '/webhooks/github',
+      {
+        method: 'POST',
+        headers: {
+          'x-hub-signature-256': 'valid-signature',
+          'x-github-event': 'push',
+          'x-github-delivery': 'test-delivery-id',
+        },
+        body: JSON.stringify({
+          ref: 'refs/heads/main',
+        }),
       },
-      body: JSON.stringify({
-        ref: 'refs/heads/main'
-      })
-    }, env);
+      env
+    );
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ message: 'Event ignored' });
@@ -95,8 +103,8 @@ describe('Webhook Handler', () => {
 
   it('should process valid pull request opened event', async () => {
     vi.mocked(validateWebhookSignature).mockResolvedValue(true);
-    vi.mocked(env.CACHE.get).mockResolvedValue(null); // No duplicate
-    vi.mocked(env.RATE_LIMITS.get).mockResolvedValue(null); // No rate limit
+    vi.mocked(env.CACHE.get).mockResolvedValue(null as any); // No duplicate
+    vi.mocked(env.RATE_LIMITS.get).mockResolvedValue(null as any); // No rate limit
 
     const payload = {
       action: 'opened',
@@ -104,28 +112,32 @@ describe('Webhook Handler', () => {
         number: 1,
         draft: false,
         user: { type: 'User', login: 'test-user' },
-        head: { sha: 'abc123' }
+        head: { sha: 'abc123' },
       },
       repository: { full_name: 'test/repo' },
-      installation: { id: 12345 }
+      installation: { id: 12345 },
     };
 
     const executionCtx = {
-      waitUntil: vi.fn()
+      waitUntil: vi.fn(),
     };
 
-    const response = await app.request('/webhooks/github', {
-      method: 'POST',
-      headers: {
-        'x-hub-signature-256': 'valid-signature',
-        'x-github-event': 'pull_request',
-        'x-github-delivery': 'test-delivery-id'
+    const response = await app.request(
+      '/webhooks/github',
+      {
+        method: 'POST',
+        headers: {
+          'x-hub-signature-256': 'valid-signature',
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'test-delivery-id',
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload)
-    }, { ...env, executionCtx } as any);
+      { ...env, executionCtx } as any
+    );
 
     expect(response.status).toBe(200);
-    const json = await response.json();
+    const json = (await response.json()) as any;
     expect(json.message).toBe('Review processing started');
     expect(json.deliveryId).toBe('test-delivery-id');
     expect(executionCtx.waitUntil).toHaveBeenCalled();
@@ -140,21 +152,25 @@ describe('Webhook Handler', () => {
         number: 1,
         draft: true,
         user: { type: 'User', login: 'test-user' },
-        head: { sha: 'abc123' }
+        head: { sha: 'abc123' },
       },
       repository: { full_name: 'test/repo' },
-      installation: { id: 12345 }
+      installation: { id: 12345 },
     };
 
-    const response = await app.request('/webhooks/github', {
-      method: 'POST',
-      headers: {
-        'x-hub-signature-256': 'valid-signature',
-        'x-github-event': 'pull_request',
-        'x-github-delivery': 'test-delivery-id'
+    const response = await app.request(
+      '/webhooks/github',
+      {
+        method: 'POST',
+        headers: {
+          'x-hub-signature-256': 'valid-signature',
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'test-delivery-id',
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload)
-    }, env);
+      env
+    );
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ message: 'Draft PR ignored' });
@@ -162,8 +178,8 @@ describe('Webhook Handler', () => {
 
   it('should respect rate limits', async () => {
     vi.mocked(validateWebhookSignature).mockResolvedValue(true);
-    vi.mocked(env.CACHE.get).mockResolvedValue(null); // No duplicate
-    vi.mocked(env.RATE_LIMITS.get).mockResolvedValue('11'); // Over limit
+    vi.mocked(env.CACHE.get).mockResolvedValue(null as any); // No duplicate
+    vi.mocked(env.RATE_LIMITS.get).mockResolvedValue('11' as any); // Over limit
 
     const payload = {
       action: 'opened',
@@ -171,21 +187,25 @@ describe('Webhook Handler', () => {
         number: 1,
         draft: false,
         user: { type: 'User', login: 'test-user' },
-        head: { sha: 'abc123' }
+        head: { sha: 'abc123' },
       },
       repository: { full_name: 'test/repo' },
-      installation: { id: 12345 }
+      installation: { id: 12345 },
     };
 
-    const response = await app.request('/webhooks/github', {
-      method: 'POST',
-      headers: {
-        'x-hub-signature-256': 'valid-signature',
-        'x-github-event': 'pull_request',
-        'x-github-delivery': 'test-delivery-id'
+    const response = await app.request(
+      '/webhooks/github',
+      {
+        method: 'POST',
+        headers: {
+          'x-hub-signature-256': 'valid-signature',
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'test-delivery-id',
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload)
-    }, env);
+      env
+    );
 
     expect(response.status).toBe(429);
     expect(await response.json()).toEqual({ error: 'Rate limit exceeded' });

@@ -27,7 +27,7 @@ export class ReviewFormatter {
     if (responseText.startsWith('## 🔍 PR Review Summary')) {
       return this.parseMarkdownResponse(responseText);
     }
-    
+
     try {
       // Try to extract JSON from the response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -36,7 +36,7 @@ export class ReviewFormatter {
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
-      
+
       // Validate required fields
       if (!parsed.summary || !parsed.comments) {
         throw new Error('Invalid response structure');
@@ -46,37 +46,37 @@ export class ReviewFormatter {
     } catch (error) {
       logger.error('Failed to parse AI response', error as Error, {
         responseLength: responseText.length,
-        responsePreview: responseText.substring(0, 200)
+        responsePreview: responseText.substring(0, 200),
       });
-      
+
       // Return a fallback response
       return {
         summary: {
           verdict: 'comment',
           confidence: 0.5,
           mainIssues: ['Failed to parse AI response'],
-          positives: []
+          positives: [],
         },
         comments: [],
-        overallFeedback: 'An error occurred while processing the review.'
+        overallFeedback: 'An error occurred while processing the review.',
       };
     }
   }
-  
-  private static parseMarkdownResponse(markdownText: string): AIReviewResponse {
+
+  static parseMarkdownResponse(markdownText: string): AIReviewResponse {
     // Extract metadata from the summary header
     const titleMatch = markdownText.match(/\*\*Title:\*\* (.+)/);
     const authorMatch = markdownText.match(/\*\*Author:\*\* (.+)/);
     const filesMatch = markdownText.match(/\*\*Files:\*\* (\d+) files changed/);
     const skippedMatch = markdownText.match(/\*\*Skipped:\*\* (\d+) files/);
-    
-    const filesCount = filesMatch ? parseInt(filesMatch[1]) : 0;
-    const skippedCount = skippedMatch ? parseInt(skippedMatch[1]) : 0;
+
+    const filesCount = filesMatch?.[1] ? parseInt(filesMatch[1], 10) : 0;
+    const skippedCount = skippedMatch?.[1] ? parseInt(skippedMatch[1], 10) : 0;
     const reviewedCount = filesCount - skippedCount;
-    
+
     // Extract file reviews
     const fileReviews = markdownText.split(/### 📄 /).slice(1);
-    
+
     // Analyze the reviews to determine verdict
     let approveCount = 0;
     let requestChangesCount = 0;
@@ -85,19 +85,20 @@ export class ReviewFormatter {
     let bugs = 0;
     const mainIssues: string[] = [];
     const positives: string[] = [];
-    const fileResults: Array<{filename: string, verdict: string, issues: number, review: any}> = [];
+    const fileResults: Array<{ filename: string; verdict: string; issues: number; review: any }> =
+      [];
     const allComments: ReviewComment[] = [];
-    
-    fileReviews.forEach(review => {
-      const fileName = review.split('\n')[0].trim();
+
+    fileReviews.forEach((review) => {
+      const fileName = review.split('\n')[0]?.trim() || '';
       let fileIssues = 0;
-      
+
       // Skip files that were too large
       if (review.includes('⚠️ File too large')) {
-        fileResults.push({filename: fileName, verdict: 'skipped', issues: 0, review: null});
+        fileResults.push({ filename: fileName, verdict: 'skipped', issues: 0, review: null });
         return;
       }
-      
+
       // Try to parse JSON from the review
       try {
         const jsonMatch = review.match(/\{[\s\S]*\}/);
@@ -107,7 +108,7 @@ export class ReviewFormatter {
             const verdict = parsed.summary.verdict;
             if (verdict === 'approve') approveCount++;
             else if (verdict === 'request_changes') requestChangesCount++;
-            
+
             if (parsed.comments) {
               parsed.comments.forEach((comment: any) => {
                 if (comment.severity === 'critical') criticalIssues++;
@@ -116,9 +117,9 @@ export class ReviewFormatter {
                 fileIssues++;
               });
             }
-            
-            fileResults.push({filename: fileName, verdict, issues: fileIssues, review: parsed});
-            
+
+            fileResults.push({ filename: fileName, verdict, issues: fileIssues, review: parsed });
+
             // Extract positives and issues
             if (parsed.summary.positives) {
               parsed.summary.positives.forEach((positive: string) => {
@@ -130,7 +131,7 @@ export class ReviewFormatter {
                 if (!mainIssues.includes(issue)) mainIssues.push(issue);
               });
             }
-            
+
             // Extract comments for line-by-line suggestions
             if (parsed.comments && Array.isArray(parsed.comments)) {
               parsed.comments.forEach((comment: any) => {
@@ -138,45 +139,58 @@ export class ReviewFormatter {
                   path: fileName,
                   line: comment.line || 1,
                   side: 'RIGHT' as const,
-                  body: this.formatCommentBody(comment, 
-                    {critical: '🔴', important: '🟡', minor: '🟢'},
-                    {bug: '🐛', security: '🔒', performance: '⚡', style: '✨', improvement: '💡'}
+                  body: this.formatCommentBody(
+                    comment,
+                    { critical: '🔴', important: '🟡', minor: '🟢' },
+                    { bug: '🐛', security: '🔒', performance: '⚡', style: '✨', improvement: '💡' }
                   ),
-                  severity: comment.severity === 'critical' ? 'error' : 
-                           comment.severity === 'important' ? 'warning' : 'info',
-                  category: comment.category
+                  severity:
+                    comment.severity === 'critical'
+                      ? 'error'
+                      : comment.severity === 'important'
+                        ? 'warning'
+                        : 'info',
+                  category: comment.category,
                 });
               });
             }
           }
         }
-      } catch (e) {
+      } catch (_e) {
         // If we can't parse JSON, analyze text
-        if (review.toLowerCase().includes('critical') || 
-            review.toLowerCase().includes('security')) {
+        if (
+          review.toLowerCase().includes('critical') ||
+          review.toLowerCase().includes('security')
+        ) {
           requestChangesCount++;
-          fileResults.push({filename: fileName, verdict: 'request_changes', issues: 1, review: null});
+          fileResults.push({
+            filename: fileName,
+            verdict: 'request_changes',
+            issues: 1,
+            review: null,
+          });
         } else {
-          fileResults.push({filename: fileName, verdict: 'comment', issues: 0, review: null});
+          fileResults.push({ filename: fileName, verdict: 'comment', issues: 0, review: null });
         }
       }
     });
-    
+
     // Determine overall verdict
     let verdict: 'approve' | 'request_changes' | 'comment' = 'comment';
     let confidence = 0.7;
-    
+
     if (requestChangesCount > 0 || criticalIssues > 0 || securityIssues > 0) {
       verdict = 'request_changes';
       confidence = 0.9;
       if (criticalIssues > 0) mainIssues.unshift(`🔴 ${criticalIssues} critical issues found`);
-      if (securityIssues > 0) mainIssues.unshift(`🔒 ${securityIssues} security vulnerabilities detected`);
+      if (securityIssues > 0)
+        mainIssues.unshift(`🔒 ${securityIssues} security vulnerabilities detected`);
       if (bugs > 0) mainIssues.unshift(`🐛 ${bugs} potential bugs identified`);
     } else if (approveCount > requestChangesCount && approveCount > filesCount / 2) {
       verdict = 'approve';
       confidence = 0.8;
     }
-    
+
     // Build formatted feedback
     const formattedFeedback = this.formatChunkedReview({
       title: titleMatch?.[1] || 'Pull Request',
@@ -190,28 +204,41 @@ export class ReviewFormatter {
       securityIssues,
       bugs,
       approveCount,
-      requestChangesCount
+      requestChangesCount,
     });
-    
+
     return {
       summary: {
         verdict,
         confidence,
         mainIssues: mainIssues.length > 0 ? mainIssues : ['Review completed'],
-        positives: positives.length > 0 ? positives : [`Successfully reviewed ${reviewedCount} files`]
+        positives:
+          positives.length > 0 ? positives : [`Successfully reviewed ${reviewedCount} files`],
       },
-      comments: allComments,
-      overallFeedback: formattedFeedback
+      comments: allComments.map((comment) => ({
+        file: comment.path,
+        line: comment.line,
+        severity:
+          comment.severity === 'error'
+            ? ('critical' as const)
+            : comment.severity === 'warning'
+              ? ('important' as const)
+              : ('minor' as const),
+        category: comment.category,
+        message: comment.body,
+        suggestion: undefined,
+      })),
+      overallFeedback: formattedFeedback,
     };
   }
-  
-  private static formatChunkedReview(data: {
+
+  static formatChunkedReview(data: {
     title: string;
     author: string;
     filesCount: number;
     reviewedCount: number;
     skippedCount: number;
-    fileResults: Array<{filename: string, verdict: string, issues: number, review: any}>;
+    fileResults: Array<{ filename: string; verdict: string; issues: number; review: any }>;
     verdict: string;
     criticalIssues: number;
     securityIssues: number;
@@ -222,28 +249,24 @@ export class ReviewFormatter {
     const verdictEmoji = {
       approve: '✅',
       request_changes: '❌',
-      comment: '💬'
+      comment: '💬',
     };
-    
-    const verdictColor = {
-      approve: '22c55e',
-      request_changes: 'ef4444',
-      comment: '3b82f6'
-    };
-    
+
+    // Removed unused verdictColor
+
     const verdictText = {
       approve: 'APPROVED',
       request_changes: 'CHANGES REQUESTED',
-      comment: 'COMMENTED'
+      comment: 'COMMENTED',
     };
-    
+
     let markdown = `## ${verdictEmoji[data.verdict as keyof typeof verdictEmoji]} Code Review Summary\n\n`;
-    
+
     // Verdict box
     markdown += `> ### ${verdictEmoji[data.verdict as keyof typeof verdictEmoji]} **${verdictText[data.verdict as keyof typeof verdictText]}**\n`;
     markdown += `> \n`;
     markdown += `> **${data.title}** by @${data.author}\n\n`;
-    
+
     // Stats boxes
     markdown += `<table>\n<tr>\n`;
     markdown += `<td align="center">\n\n**📁 Files**<br/>${data.filesCount}\n\n</td>\n`;
@@ -261,37 +284,42 @@ export class ReviewFormatter {
       markdown += `<td align="center">\n\n**🐛 Bugs**<br/>${data.bugs}\n\n</td>\n`;
     }
     markdown += `</tr>\n</table>\n\n`;
-    
+
     // File results summary
     if (data.fileResults.length > 0) {
       markdown += `### 📄 File Review Results\n\n`;
       markdown += `<details>\n<summary>Click to expand file-by-file results</summary>\n\n`;
       markdown += `| File | Status | Issues |\n`;
       markdown += `|------|--------|--------|\n`;
-      
-      data.fileResults.forEach(file => {
-        const statusEmoji = file.verdict === 'approve' ? '✅' :
-                           file.verdict === 'request_changes' ? '🔴' :
-                           file.verdict === 'skipped' ? '⚠️' : '💬';
-        const issuesText = file.verdict === 'skipped' ? 'N/A' : 
-                          file.issues === 0 ? '✓' : `${file.issues}`;
+
+      data.fileResults.forEach((file) => {
+        const statusEmoji =
+          file.verdict === 'approve'
+            ? '✅'
+            : file.verdict === 'request_changes'
+              ? '🔴'
+              : file.verdict === 'skipped'
+                ? '⚠️'
+                : '💬';
+        const issuesText =
+          file.verdict === 'skipped' ? 'N/A' : file.issues === 0 ? '✓' : `${file.issues}`;
         markdown += `| ${file.filename} | ${statusEmoji} | ${issuesText} |\n`;
       });
-      
+
       markdown += `\n</details>\n\n`;
     }
-    
+
     // Summary stats
     if (data.approveCount > 0 || data.requestChangesCount > 0) {
       markdown += `### 📊 Review Statistics\n\n`;
       const total = data.approveCount + data.requestChangesCount;
       const approvePercent = Math.round((data.approveCount / total) * 100);
       const changesPercent = Math.round((data.requestChangesCount / total) * 100);
-      
+
       markdown += `🟢 **Approved files:** ${data.approveCount} (${approvePercent}%)\n`;
       markdown += `🔴 **Changes requested:** ${data.requestChangesCount} (${changesPercent}%)\n\n`;
     }
-    
+
     // Add action items based on verdict
     if (data.verdict === 'request_changes') {
       markdown += `### 🔧 Action Required\n\n`;
@@ -318,60 +346,67 @@ export class ReviewFormatter {
       markdown += `> \n`;
       markdown += `> Please review the feedback and make improvements where appropriate.\n\n`;
     }
-    
+
     // Add detailed file reviews section
     markdown += `### 📝 Detailed Review\n\n`;
-    
+
     // Group files by verdict for better organization
-    const criticalFiles = data.fileResults.filter(f => f.verdict === 'request_changes' && f.review);
-    const warningFiles = data.fileResults.filter(f => f.verdict === 'comment' && f.review);
-    const approvedFiles = data.fileResults.filter(f => f.verdict === 'approve' && f.review);
-    
+    const criticalFiles = data.fileResults.filter(
+      (f) => f.verdict === 'request_changes' && f.review
+    );
+    const warningFiles = data.fileResults.filter((f) => f.verdict === 'comment' && f.review);
+    const approvedFiles = data.fileResults.filter((f) => f.verdict === 'approve' && f.review);
+
     if (criticalFiles.length > 0) {
       markdown += `#### ❌ Files Requiring Changes\n\n`;
-      criticalFiles.forEach(file => {
+      criticalFiles.forEach((file) => {
         markdown += this.formatFileReview(file);
       });
     }
-    
+
     if (warningFiles.length > 0) {
       markdown += `#### ⚠️ Files with Suggestions\n\n`;
-      warningFiles.forEach(file => {
+      warningFiles.forEach((file) => {
         markdown += this.formatFileReview(file);
       });
     }
-    
+
     if (approvedFiles.length > 0) {
       markdown += `<details>\n<summary>✅ Approved Files (${approvedFiles.length})</summary>\n\n`;
-      approvedFiles.forEach(file => {
+      approvedFiles.forEach((file) => {
         markdown += this.formatFileReview(file);
       });
       markdown += `</details>\n\n`;
     }
-    
+
     return markdown;
   }
-  
-  private static formatFileReview(file: {filename: string, verdict: string, issues: number, review: any}): string {
+
+  private static formatFileReview(file: {
+    filename: string;
+    verdict: string;
+    issues: number;
+    review: any;
+  }): string {
     let markdown = `<details>\n<summary><b>${file.filename}</b>`;
-    
+
     if (file.issues > 0) {
       markdown += ` - ${file.issues} issue${file.issues > 1 ? 's' : ''}`;
     }
-    
+
     markdown += `</summary>\n\n`;
-    
+
     if (!file.review) {
       markdown += `> ⚠️ Review data not available\n\n`;
       markdown += `</details>\n\n`;
       return markdown;
     }
-    
+
     // Add overall feedback for the file
     if (file.review.overallFeedback) {
       markdown += `**Overall Assessment:**\n${file.review.overallFeedback}\n\n`;
     }
-    
+
     // Add summary points
     if (file.review.summary) {
       if (file.review.summary.positives && file.review.summary.positives.length > 0) {
@@ -381,7 +416,7 @@ export class ReviewFormatter {
         });
         markdown += `\n`;
       }
-      
+
       if (file.review.summary.mainIssues && file.review.summary.mainIssues.length > 0) {
         markdown += `**🔍 Issues found:**\n`;
         file.review.summary.mainIssues.forEach((issue: string) => {
@@ -390,49 +425,52 @@ export class ReviewFormatter {
         markdown += `\n`;
       }
     }
-    
+
     // Add specific line comments
     if (file.review.comments && file.review.comments.length > 0) {
       markdown += `**📍 Line-by-line feedback:**\n\n`;
-      
+
       const severityEmoji: Record<string, string> = {
         critical: '🔴',
         important: '🟡',
-        minor: '🟢'
+        minor: '🟢',
       };
-      
+
       const categoryEmoji: Record<string, string> = {
         bug: '🐛',
         security: '🔒',
         performance: '⚡',
         style: '✨',
-        improvement: '💡'
+        improvement: '💡',
       };
-      
+
       file.review.comments.forEach((comment: any) => {
         markdown += `**Line ${comment.line}:** ${severityEmoji[comment.severity] || '💭'} ${categoryEmoji[comment.category] || ''} ${comment.message}\n`;
-        
+
         if (comment.suggestion) {
           markdown += `\n\`\`\`suggestion\n${comment.suggestion}\n\`\`\`\n`;
         }
-        
+
         markdown += `\n`;
       });
     }
-    
+
     markdown += `</details>\n\n`;
     return markdown;
   }
 
-  static formatReview(aiResponse: AIReviewResponse, metadata: {
-    model: string;
-    tokensUsed: number;
-    processingTime: number;
-  }): Review {
+  static formatReview(
+    aiResponse: AIReviewResponse,
+    metadata: {
+      model: string;
+      tokensUsed: number;
+      processingTime: number;
+    }
+  ): Review {
     const severityEmoji = {
       critical: '🔴',
       important: '🟡',
-      minor: '🟢'
+      minor: '🟢',
     };
 
     const categoryEmoji = {
@@ -440,18 +478,22 @@ export class ReviewFormatter {
       security: '🔒',
       performance: '⚡',
       style: '✨',
-      improvement: '💡'
+      improvement: '💡',
     };
 
     // Format comments
-    const comments: ReviewComment[] = aiResponse.comments.map(comment => ({
+    const comments: ReviewComment[] = aiResponse.comments.map((comment) => ({
       path: comment.file,
       line: comment.line,
       side: 'RIGHT' as const,
       body: this.formatCommentBody(comment, severityEmoji, categoryEmoji),
-      severity: comment.severity === 'critical' ? 'error' : 
-               comment.severity === 'important' ? 'warning' : 'info',
-      category: comment.category
+      severity:
+        comment.severity === 'critical'
+          ? 'error'
+          : comment.severity === 'important'
+            ? 'warning'
+            : 'info',
+      category: comment.category,
     }));
 
     // Format summary
@@ -459,7 +501,7 @@ export class ReviewFormatter {
       verdict: aiResponse.summary.verdict,
       confidence: aiResponse.summary.confidence,
       mainIssues: aiResponse.summary.mainIssues,
-      positives: aiResponse.summary.positives
+      positives: aiResponse.summary.positives,
     };
 
     // Format overall review body
@@ -473,8 +515,8 @@ export class ReviewFormatter {
         model: metadata.model,
         tokensUsed: metadata.tokensUsed,
         processingTime: metadata.processingTime,
-        reviewVersion: '1.0.0'
-      }
+        reviewVersion: '1.0.0',
+      },
     };
   }
 
@@ -484,11 +526,11 @@ export class ReviewFormatter {
     categoryEmoji: Record<string, string>
   ): string {
     let body = `${severityEmoji[comment.severity]} ${categoryEmoji[comment.category]} **${comment.severity.toUpperCase()}**: ${comment.message}`;
-    
+
     if (comment.suggestion) {
       body += `\n\n**Suggestion:**\n\`\`\`suggestion\n${comment.suggestion}\n\`\`\``;
     }
-    
+
     return body;
   }
 
@@ -500,13 +542,16 @@ export class ReviewFormatter {
     const verdictEmoji = {
       approve: '✅',
       request_changes: '❌',
-      comment: '💬'
+      comment: '💬',
     };
 
     // Check if this is a chunking mode response (formatted feedback)
-    if (aiResponse.overallFeedback && (aiResponse.overallFeedback.startsWith('## ✅') || 
-                                       aiResponse.overallFeedback.startsWith('## ❌') || 
-                                       aiResponse.overallFeedback.startsWith('## 💬'))) {
+    if (
+      aiResponse.overallFeedback &&
+      (aiResponse.overallFeedback.startsWith('## ✅') ||
+        aiResponse.overallFeedback.startsWith('## ❌') ||
+        aiResponse.overallFeedback.startsWith('## 💬'))
+    ) {
       // For chunking mode, use the formatted markdown with header and footer
       let body = `# 🤖 ArgusAI Code Review\n\n`;
       body += aiResponse.overallFeedback;
@@ -525,7 +570,7 @@ export class ReviewFormatter {
 
     if (summary.positives.length > 0) {
       body += `### ✨ What looks good:\n`;
-      summary.positives.forEach(positive => {
+      summary.positives.forEach((positive) => {
         body += `- ${positive}\n`;
       });
       body += '\n';
@@ -533,13 +578,16 @@ export class ReviewFormatter {
 
     if (summary.mainIssues.length > 0) {
       body += `### 🔍 Main concerns:\n`;
-      summary.mainIssues.forEach(issue => {
+      summary.mainIssues.forEach((issue) => {
         body += `- ${issue}\n`;
       });
       body += '\n';
     }
 
-    if (aiResponse.overallFeedback && !aiResponse.overallFeedback.startsWith('## 🔍 PR Review Summary')) {
+    if (
+      aiResponse.overallFeedback &&
+      !aiResponse.overallFeedback.startsWith('## 🔍 PR Review Summary')
+    ) {
       body += `### 💭 Overall Feedback\n${aiResponse.overallFeedback}\n\n`;
     }
 

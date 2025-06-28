@@ -32,7 +32,7 @@ export async function processReviewAsync(reviewData: ReviewData, env: Env): Prom
     // Step 1: Check if we already have a cached review
     const cacheKey = `review:${reviewData.repository}/${reviewData.prNumber}:${reviewData.sha}`;
     const cachedReview = await env.CACHE.get(cacheKey);
-    
+
     if (cachedReview) {
       logger.info('Found cached review, skipping processing', {
         pr: reviewData.prNumber,
@@ -61,13 +61,17 @@ export async function processReviewAsync(reviewData: ReviewData, env: Env): Prom
     // Note: KV has a 1 write/second limit on free tier
     // Consider implementing a write queue or batch writes
     try {
-      await env.CACHE.put(cacheKey, JSON.stringify({
-        timestamp: Date.now(),
-        sha: reviewData.sha,
-        // analysis results would go here
-      }), {
-        expirationTtl: 86400 * 7, // 7 days
-      });
+      await env.CACHE.put(
+        cacheKey,
+        JSON.stringify({
+          timestamp: Date.now(),
+          sha: reviewData.sha,
+          // analysis results would go here
+        }),
+        {
+          expirationTtl: 86400 * 7, // 7 days
+        }
+      );
     } catch (error) {
       logger.warn('Failed to cache review (possibly rate limited)', error);
     }
@@ -77,13 +81,12 @@ export async function processReviewAsync(reviewData: ReviewData, env: Env): Prom
       pr: reviewData.prNumber,
       processingTime,
     });
-
   } catch (error) {
     logger.error('Failed to process review', error, {
       pr: reviewData.prNumber,
       sha: reviewData.sha,
     });
-    
+
     // Consider implementing retry logic here
     // But be careful not to exceed free tier limits
     throw error;

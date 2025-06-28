@@ -24,7 +24,7 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
   const format = c.req.query('format') || 'json';
   const checks: StatusCheck[] = [];
   const modelQuotas: ModelQuota[] = [];
-  
+
   // Check GitHub App Private Key
   try {
     const hasPrivateKey = !!c.env.GITHUB_APP_PRIVATE_KEY;
@@ -85,15 +85,15 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
       } catch (error: any) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         const is401 = errorMessage.includes('Bad credentials') || error.status === 401;
-        
+
         checks.push({
           name: 'GitHub API Connection',
           status: 'error',
           message: 'Failed to authenticate',
           details: errorMessage,
-          solution: is401 ? 
-            'Create a GitHub Personal Access Token with "Models" permission (read-only) at https://github.com/settings/tokens/new and add it to .dev.vars as GITHUB_TOKEN=your_token' :
-            'Check your network connection and GitHub API status'
+          solution: is401
+            ? 'Create a GitHub Personal Access Token with "Models" permission (read-only) at https://github.com/settings/tokens/new and add it to .dev.vars as GITHUB_TOKEN=your_token'
+            : 'Check your network connection and GitHub API status',
         });
       }
     }
@@ -129,9 +129,9 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
           name: `KV Namespace: ${kv.name}`,
           status: isLocal ? 'warning' : 'error',
           message: 'Not configured',
-          solution: isLocal ? 
-            `Run: wrangler kv:namespace create "${kv.name}" --preview` :
-            'Configure KV namespace bindings in wrangler.toml'
+          solution: isLocal
+            ? `Run: wrangler kv:namespace create "${kv.name}" --preview`
+            : 'Configure KV namespace bindings in wrangler.toml',
         });
       }
     } catch (error) {
@@ -147,14 +147,14 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
   // Check GitHub Models API and Quota
   if (c.env.GITHUB_TOKEN) {
     const models = ['gpt-4o-mini', 'gpt-4o', 'o1-mini', 'o1-preview'];
-    
+
     for (const model of models) {
       try {
         // Try a minimal completion to test the model
         const response = await fetch('https://models.inference.ai.azure.com/chat/completions', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${c.env.GITHUB_TOKEN}`,
+            Authorization: `Bearer ${c.env.GITHUB_TOKEN}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -168,7 +168,7 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
           // Check rate limit headers for quota info
           const remaining = response.headers.get('x-ratelimit-remaining');
           const limit = response.headers.get('x-ratelimit-limit');
-          
+
           modelQuotas.push({
             model,
             usage: {
@@ -210,13 +210,13 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
         }
       }
     }
-  } catch (error) {
+  } catch (_error) {
     recentActivity.error = 'Failed to fetch recent activity';
   }
 
   // Overall status
-  const allOk = checks.every(check => check.status === 'ok' || check.status === 'warning');
-  
+  const allOk = checks.every((check) => check.status === 'ok' || check.status === 'warning');
+
   const statusData = {
     status: allOk ? 'healthy' : 'degraded',
     timestamp: new Date().toISOString(),
@@ -239,16 +239,20 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
 function generateStatusHTML(data: any): string {
   const statusIcon = data.status === 'healthy' ? '✅' : '⚠️';
   const statusColor = data.status === 'healthy' ? '#22c55e' : '#f59e0b';
-  
+
   const checkIcon = (status: string) => {
-    switch(status) {
-      case 'ok': return '✅';
-      case 'warning': return '⚠️';
-      case 'error': return '❌';
-      default: return '❓';
+    switch (status) {
+      case 'ok':
+        return '✅';
+      case 'warning':
+        return '⚠️';
+      case 'error':
+        return '❌';
+      default:
+        return '❓';
     }
   };
-  
+
   const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -403,53 +407,72 @@ function generateStatusHTML(data: any): string {
 
   <div class="section">
     <h2>🔧 System Checks</h2>
-    ${data.checks.map((check: any) => `
+    ${data.checks
+      .map(
+        (check: any) => `
       <div class="check-item">
         <span class="check-icon">${checkIcon(check.status)}</span>
         <div style="flex: 1;">
           <div class="check-name">${check.name}</div>
           <div class="check-message">${check.message}</div>
-          ${check.details && (check.status === 'error' || check.status === 'warning') ? 
-            `<div class="check-details">${
-              typeof check.details === 'string' ? check.details : JSON.stringify(check.details, null, 2)
-            }</div>` : ''
+          ${
+            check.details && (check.status === 'error' || check.status === 'warning')
+              ? `<div class="check-details">${
+                  typeof check.details === 'string'
+                    ? check.details
+                    : JSON.stringify(check.details, null, 2)
+                }</div>`
+              : ''
           }
-          ${check.solution ? 
-            `<div class="check-solution">💡 ${check.solution}</div>` : ''
-          }
+          ${check.solution ? `<div class="check-solution">💡 ${check.solution}</div>` : ''}
         </div>
       </div>
-    `).join('')}
+    `
+      )
+      .join('')}
   </div>
 
-  ${data.modelQuotas ? `
+  ${
+    data.modelQuotas
+      ? `
   <div class="section">
     <h2>🤖 GitHub Models Quota</h2>
     <div class="model-grid">
-      ${data.modelQuotas.map((model: any) => `
+      ${data.modelQuotas
+        .map(
+          (model: any) => `
         <div class="model-card">
           <div class="model-name">${model.model}</div>
-          ${model.error ? 
-            `<div class="model-error">${model.error}</div>` :
-            `<div class="model-usage">
+          ${
+            model.error
+              ? `<div class="model-error">${model.error}</div>`
+              : `<div class="model-usage">
               ${model.usage?.remaining !== undefined ? `Remaining: ${model.usage.remaining}` : ''}
               ${model.usage?.requests !== undefined ? ` / ${model.usage.requests} requests` : ''}
             </div>`
           }
         </div>
-      `).join('')}
+      `
+        )
+        .join('')}
     </div>
   </div>
-  ` : ''}
+  `
+      : ''
+  }
 
-  ${data.recentActivity && Object.keys(data.recentActivity).length > 0 ? `
+  ${
+    data.recentActivity && Object.keys(data.recentActivity).length > 0
+      ? `
   <div class="section">
     <h2>📊 Recent Activity</h2>
     <div class="activity-log">
       <pre>${JSON.stringify(data.recentActivity, null, 2)}</pre>
     </div>
   </div>
-  ` : ''}
+  `
+      : ''
+  }
 
   <div class="footer">
     <p>
@@ -462,6 +485,6 @@ function generateStatusHTML(data: any): string {
 </body>
 </html>
   `;
-  
+
   return html;
 }

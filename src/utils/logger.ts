@@ -27,11 +27,11 @@ export class Logger {
   private formatMessage(level: string, message: string, data?: any): string {
     const timestamp = new Date().toISOString();
     const baseMessage = `[${timestamp}] [${level}] [${this.context}] ${message}`;
-    
+
     if (data) {
       return `${baseMessage} ${JSON.stringify(data)}`;
     }
-    
+
     return baseMessage;
   }
 
@@ -57,11 +57,14 @@ export class Logger {
     if (this.shouldLog(LogLevel.ERROR)) {
       const errorData = {
         ...data,
-        error: error instanceof Error ? {
-          message: error.message,
-          stack: error.stack,
-          name: error.name,
-        } : error,
+        error:
+          error instanceof Error
+            ? {
+                message: error.message,
+                stack: error.stack,
+                name: error.name,
+              }
+            : error,
       };
       console.error(this.formatMessage('ERROR', message, errorData));
     }
@@ -77,7 +80,7 @@ export class Logger {
 export function createLogger(context: string, env?: { LOG_LEVEL?: string }): Logger {
   const logLevel = env?.LOG_LEVEL?.toUpperCase();
   let level: LogLevel;
-  
+
   switch (logLevel) {
     case 'DEBUG':
       level = LogLevel.DEBUG;
@@ -91,6 +94,6 @@ export function createLogger(context: string, env?: { LOG_LEVEL?: string }): Log
     default:
       level = LogLevel.INFO;
   }
-  
+
   return new Logger(context, level);
 }

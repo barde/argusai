@@ -1,5 +1,6 @@
 import { Context } from 'hono';
 import type { Env } from '../types/env';
+import { StorageServiceFactory } from '../storage';
 
 export async function healthHandler(c: Context<{ Bindings: Env }>) {
   console.log('Health check endpoint called');
@@ -15,8 +16,12 @@ export async function healthHandler(c: Context<{ Bindings: Env }>) {
   };
 
   try {
+    // Initialize storage service
+    const storageFactory = new StorageServiceFactory();
+    const storage = storageFactory.create(c.env);
+
     // Test KV access
-    await c.env.CACHE.get('health-check');
+    await storage.get('health-check');
     checks.checks.kv = true;
   } catch (error) {
     console.error('KV health check failed:', error);

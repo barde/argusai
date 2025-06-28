@@ -4,6 +4,7 @@ import { Logger } from '../utils/logger';
 import { ReviewData } from '../types/review';
 import type { GitHubAPIService } from './github-api';
 import type { GitHubModelsService } from './github-models';
+import { StorageServiceFactory } from '../storage';
 
 const logger = new Logger('review-processor');
 
@@ -234,25 +235,30 @@ export async function processReviewAsync(reviewData: ReviewData, env: Env): Prom
   });
 
   try {
+    // Initialize storage service
+    const storageFactory = new StorageServiceFactory();
+    const storage = storageFactory.create(env);
+
     // Step 1: Check if we already have a cached review
-    const cacheKey = `review:${reviewData.repository}:${reviewData.prNumber}:${reviewData.sha}`;
-    const cachedReview = await env.CACHE.get(cacheKey);
+    const cachedReview = await storage.getReview(
+      reviewData.repository,
+      reviewData.prNumber,
+      reviewData.sha
+    );
 
     if (cachedReview) {
       logger.info('Found cached review, skipping processing', {
         pr: reviewData.prNumber,
-        cacheKey,
+        sha: reviewData.sha,
       });
       return;
     }
 
     // Step 2: Check rate limits
-    const rateLimitKey = `rate:${reviewData.installationId}:${Math.floor(Date.now() / 60000)}`;
-    const count = await env.RATE_LIMITS.get(rateLimitKey);
+    const rateLimitResult = await storage.incrementRateLimit(String(reviewData.installationId));
 
-    if (count && parseInt(count) > 10) {
-      // 10 reviews per minute
-      throw new Error('Rate limit exceeded');
+    if (!rateLimitResult.allowed) {
+      throw new Error(`Rate limit exceeded. Remaining: ${rateLimitResult.remaining}`);
     }
 
     // Step 3: Initialize services
@@ -377,28 +383,30 @@ export async function processReviewAsync(reviewData: ReviewData, env: Env): Prom
       })),
     });
 
-    // Step 6: Update rate limit and cache
-    await Promise.all([
-      // Update rate limit counter
-      env.RATE_LIMITS.put(rateLimitKey, String(parseInt(count || '0') + 1), {
-        expirationTtl: 60,
-      }),
-      // Cache the review
-      env.CACHE.put(
-        cacheKey,
-        JSON.stringify({
+    // Step 6: Cache the review
+    try {
+      await storage.saveReview(reviewData.repository, reviewData.prNumber, reviewData.sha, {
+        repository: reviewData.repository,
+        prNumber: reviewData.prNumber,
+        sha: reviewData.sha,
+        result: {
+          summary: review.body || 'No summary',
+          files:
+            review.comments?.map((comment) => ({
+              path: comment.path || 'unknown',
+              review: comment.body || '',
+              severity: 'info' as const,
+            })) || [],
+        },
+        metadata: {
+          model: (aiResponse as any).model || 'unknown',
           timestamp: Date.now(),
-          sha: reviewData.sha,
-          review: review,
-          aiResponse: aiResponse,
-        }),
-        {
-          expirationTtl: 86400 * 7, // 7 days
-        }
-      ).catch((error) => {
-        logger.warn('Failed to cache review', error as Error);
-      }),
-    ]);
+          processingTime: Date.now() - startTime,
+        },
+      });
+    } catch (error) {
+      logger.warn('Failed to cache review', error as Error);
+    }
 
     const processingTime = Date.now() - startTime;
     logger.info('Review processing completed', {

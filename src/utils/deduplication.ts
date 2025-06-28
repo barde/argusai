@@ -1,25 +1,23 @@
+import { IStorageService } from '../storage/interface';
+
 /**
  * Checks if an event has already been processed to prevent duplicates
  */
 export async function isDuplicateEvent(
-  cache: KVNamespace,
+  storage: IStorageService,
   repository: string,
   prNumber: number,
   eventId: string
 ): Promise<boolean> {
-  const key = `dedup:${repository}:${prNumber}:${eventId}`;
-
   try {
-    const existing = await cache.get(key);
+    const isDuplicate = await storage.isDuplicate(repository, prNumber, eventId);
 
-    if (existing) {
+    if (isDuplicate) {
       return true;
     }
 
-    // Store the event ID with 24-hour TTL
-    await cache.put(key, '1', {
-      expirationTtl: 86400, // 24 hours in seconds
-    });
+    // Mark as processed
+    await storage.markProcessed(repository, prNumber, eventId);
 
     return false;
   } catch (error) {

@@ -6,6 +6,7 @@
 import type { Env } from '../types/env';
 import type { PullRequestEvent } from '../types/github';
 import { createLogger } from '../utils/logger';
+import { StorageServiceFactory } from '../storage';
 
 interface ReviewData {
   repository: string;
@@ -29,14 +30,21 @@ export async function processReviewAsync(reviewData: ReviewData, env: Env): Prom
   });
 
   try {
+    // Initialize storage service
+    const storageFactory = new StorageServiceFactory();
+    const storage = storageFactory.create(env);
+
     // Step 1: Check if we already have a cached review
-    const cacheKey = `review:${reviewData.repository}/${reviewData.prNumber}:${reviewData.sha}`;
-    const cachedReview = await env.CACHE.get(cacheKey);
+    const cachedReview = await storage.getReview(
+      reviewData.repository,
+      reviewData.prNumber,
+      reviewData.sha
+    );
 
     if (cachedReview) {
       logger.info('Found cached review, skipping processing', {
         pr: reviewData.prNumber,
-        cacheKey,
+        sha: reviewData.sha,
       });
       return;
     }
@@ -59,19 +67,22 @@ export async function processReviewAsync(reviewData: ReviewData, env: Env): Prom
     // Step 5: Cache the review (be mindful of KV write limits)
     logger.debug('Caching review result');
     // Note: KV has a 1 write/second limit on free tier
-    // Consider implementing a write queue or batch writes
+    // Storage service will handle appropriate TTLs
     try {
-      await env.CACHE.put(
-        cacheKey,
-        JSON.stringify({
+      await storage.saveReview(reviewData.repository, reviewData.prNumber, reviewData.sha, {
+        repository: reviewData.repository,
+        prNumber: reviewData.prNumber,
+        sha: reviewData.sha,
+        result: {
+          summary: 'Review placeholder',
+          files: [],
+        },
+        metadata: {
+          model: 'gpt-4o-mini',
           timestamp: Date.now(),
-          sha: reviewData.sha,
-          // analysis results would go here
-        }),
-        {
-          expirationTtl: 86400 * 7, // 7 days
-        }
-      );
+          processingTime: Date.now() - startTime,
+        },
+      });
     } catch (error) {
       logger.warn('Failed to cache review (possibly rate limited)', error);
     }

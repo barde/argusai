@@ -1,6 +1,7 @@
 import { Context } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types/env';
+import { StorageServiceFactory } from '../storage';
 
 // Configuration schema
 const ConfigSchema = z.object({
@@ -21,18 +22,22 @@ export const configHandler = {
   async get(c: Context<{ Bindings: Env }>) {
     const owner = c.req.param('owner');
     const repo = c.req.param('repo');
-    const key = `config:${owner}/${repo}`;
+
+    // Initialize storage service
+    const storageFactory = new StorageServiceFactory();
+    const storage = storageFactory.create(c.env);
 
     try {
-      const configJson = await c.env.CONFIG.get(key);
+      const config = await storage.getConfig(owner, repo);
 
-      if (!configJson) {
+      if (!config) {
         // Return default config
         return c.json(ConfigSchema.parse({}));
       }
 
-      const config = ConfigSchema.parse(JSON.parse(configJson));
-      return c.json(config);
+      // Validate the stored config
+      const validatedConfig = ConfigSchema.parse(config);
+      return c.json(validatedConfig);
     } catch (error) {
       console.error('Error getting config:', error);
       return c.json({ error: 'Failed to get configuration' }, 500);
@@ -42,7 +47,10 @@ export const configHandler = {
   async update(c: Context<{ Bindings: Env }>) {
     const owner = c.req.param('owner');
     const repo = c.req.param('repo');
-    const key = `config:${owner}/${repo}`;
+
+    // Initialize storage service
+    const storageFactory = new StorageServiceFactory();
+    const storage = storageFactory.create(c.env);
 
     try {
       // TODO: Add authentication check here
@@ -51,7 +59,7 @@ export const configHandler = {
       const body = await c.req.json();
       const config = ConfigSchema.parse(body);
 
-      await c.env.CONFIG.put(key, JSON.stringify(config));
+      await storage.saveConfig(owner, repo, config);
 
       return c.json({
         message: 'Configuration updated',

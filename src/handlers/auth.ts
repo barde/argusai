@@ -1,0 +1,329 @@
+import { Context } from 'hono';
+import { Env } from '../types/env';
+import { generateJWT, verifyJWT, extractJWTFromCookie } from '../utils/jwt';
+import { Logger } from '../utils/logger';
+
+const logger = new Logger('auth');
+
+interface GitHubUser {
+  id: number;
+  login: string;
+  name: string | null;
+  avatar_url: string;
+  email: string | null;
+}
+
+interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  scope: string;
+}
+
+/**
+ * Generate a cryptographically secure random state
+ */
+function generateState(): string {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Initiate OAuth login flow
+ */
+export async function loginHandler(c: Context<{ Bindings: Env }>) {
+  const state = generateState();
+
+  // Store state in KV with 10 minute TTL for CSRF protection
+  if (c.env.OAUTH_SESSIONS) {
+    await c.env.OAUTH_SESSIONS.put(`state:${state}`, 'valid', {
+      expirationTtl: 600, // 10 minutes
+    });
+  }
+
+  const clientId = c.env.GITHUB_OAUTH_CLIENT_ID;
+  if (!clientId) {
+    return c.json({ error: 'OAuth not configured' }, 500);
+  }
+
+  const redirectUri = `${new URL(c.req.url).origin}/auth/callback`;
+  const scope = 'repo user';
+
+  const authUrl = new URL('https://github.com/login/oauth/authorize');
+  authUrl.searchParams.set('client_id', clientId);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('scope', scope);
+  authUrl.searchParams.set('state', state);
+
+  return c.redirect(authUrl.toString());
+}
+
+/**
+ * Handle OAuth callback
+ */
+export async function callbackHandler(c: Context<{ Bindings: Env }>) {
+  const code = c.req.query('code');
+  const state = c.req.query('state');
+
+  if (!code || !state) {
+    return c.html(errorPage('Missing authorization code or state'), 400);
+  }
+
+  // Verify state for CSRF protection
+  if (c.env.OAUTH_SESSIONS) {
+    const storedState = await c.env.OAUTH_SESSIONS.get(`state:${state}`);
+    if (!storedState) {
+      return c.html(errorPage('Invalid or expired state'), 400);
+    }
+    // Delete used state
+    await c.env.OAUTH_SESSIONS.delete(`state:${state}`);
+  }
+
+  try {
+    // Exchange code for access token
+    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: c.env.GITHUB_OAUTH_CLIENT_ID,
+        client_secret: c.env.GITHUB_OAUTH_CLIENT_SECRET,
+        code,
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      throw new Error('Failed to exchange code for token');
+    }
+
+    const tokenData: TokenResponse = await tokenResponse.json();
+
+    // Fetch user info
+    const userResponse = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+
+    if (!userResponse.ok) {
+      throw new Error('Failed to fetch user info');
+    }
+
+    const user: GitHubUser = await userResponse.json();
+
+    // Store encrypted access token
+    if (c.env.OAUTH_TOKENS) {
+      // In production, encrypt the token before storing
+      await c.env.OAUTH_TOKENS.put(`token:${user.id}`, tokenData.access_token, {
+        metadata: { scope: tokenData.scope },
+      });
+    }
+
+    // Generate JWT
+    const jwt = await generateJWT(
+      {
+        sub: user.id.toString(),
+        login: user.login,
+        name: user.name || undefined,
+        avatar_url: user.avatar_url,
+      },
+      c.env.JWT_SECRET || 'development-secret'
+    );
+
+    // Set secure cookie and redirect to home
+    return c.html(successPage(), 200, {
+      'Set-Cookie': `argusai_auth=${jwt}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}`,
+    });
+  } catch (error) {
+    logger.error('OAuth callback error', error as Error);
+    return c.html(errorPage('Authentication failed'), 500);
+  }
+}
+
+/**
+ * Logout handler
+ */
+export async function logoutHandler(c: Context<{ Bindings: Env }>) {
+  const jwt = extractJWTFromCookie(c.req.header('Cookie') || null);
+
+  if (jwt && c.env.JWT_SECRET) {
+    const payload = await verifyJWT(jwt, c.env.JWT_SECRET);
+    if (payload && c.env.OAUTH_TOKENS) {
+      // Optionally revoke stored token
+      await c.env.OAUTH_TOKENS.delete(`token:${payload.sub}`);
+    }
+  }
+
+  // Clear cookie and redirect to home
+  // Clear cookie using response headers
+  c.header('Set-Cookie', 'argusai_auth=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+  return c.redirect('/', 302);
+}
+
+/**
+ * Get current user info
+ */
+export async function userHandler(c: Context<{ Bindings: Env }>) {
+  const jwt = extractJWTFromCookie(c.req.header('Cookie') || null);
+
+  if (!jwt || !c.env.JWT_SECRET) {
+    return c.json({ authenticated: false }, 401);
+  }
+
+  const payload = await verifyJWT(jwt, c.env.JWT_SECRET);
+
+  if (!payload) {
+    return c.json({ authenticated: false }, 401);
+  }
+
+  return c.json({
+    authenticated: true,
+    user: {
+      id: payload.sub,
+      login: payload.login,
+      name: payload.name,
+      avatar_url: payload.avatar_url,
+    },
+  });
+}
+
+/**
+ * Middleware to check authentication
+ */
+export async function requireAuth(
+  c: Context<{ Bindings: Env }, any, {}>,
+  next: () => Promise<void>
+) {
+  const jwt = extractJWTFromCookie(c.req.header('Cookie') || null);
+
+  if (!jwt || !c.env.JWT_SECRET) {
+    return c.json({ error: 'Authentication required' }, 401);
+  }
+
+  const payload = await verifyJWT(jwt, c.env.JWT_SECRET);
+
+  if (!payload) {
+    return c.json({ error: 'Invalid or expired token' }, 401);
+  }
+
+  // Add user to context
+  c.set('user', payload);
+
+  await next();
+  return;
+}
+
+// Helper HTML pages
+function errorPage(message: string): string {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authentication Error - ArgusAI</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: #f9fafb;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      max-width: 400px;
+    }
+    h1 {
+      color: #ef4444;
+      margin-bottom: 1rem;
+    }
+    p {
+      color: #6b7280;
+      margin-bottom: 2rem;
+    }
+    a {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background: #3b82f6;
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    a:hover {
+      background: #2563eb;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>❌ Authentication Error</h1>
+    <p>${message}</p>
+    <a href="/">Return to Home</a>
+  </div>
+</body>
+</html>
+  `;
+}
+
+function successPage(): string {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login Successful - ArgusAI</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: #f9fafb;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      max-width: 400px;
+    }
+    h1 {
+      color: #22c55e;
+      margin-bottom: 1rem;
+    }
+    p {
+      color: #6b7280;
+      margin-bottom: 1rem;
+    }
+  </style>
+  <script>
+    // Redirect to home after showing success
+    setTimeout(() => {
+      window.location.href = '/';
+    }, 1500);
+  </script>
+</head>
+<body>
+  <div class="container">
+    <h1>✅ Login Successful!</h1>
+    <p>Redirecting to dashboard...</p>
+  </div>
+</body>
+</html>
+  `;
+}

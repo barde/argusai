@@ -14,6 +14,15 @@ import {
   removeAllowedRepoHandler,
   checkAllowedRepoHandler,
 } from './handlers/allowed-repos';
+import {
+  loginHandler,
+  callbackHandler,
+  logoutHandler,
+  userHandler,
+  requireAuth,
+} from './handlers/auth';
+import { getUserRepos, enableRepo, disableRepo } from './handlers/repos';
+import { dashboardHandler } from './handlers/dashboard';
 import type { Env } from './types/env';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -22,17 +31,8 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('*', logger());
 app.use('/api/*', cors());
 
-// Root endpoint - status page (HTML by default)
-app.get('/', (c) => {
-  // Override the query function to return 'html' for format
-  const originalQuery = c.req.query.bind(c.req);
-  c.req.query = ((key?: string) => {
-    if (key === 'format') return 'html';
-    if (!key) return { format: 'html' } as any;
-    return originalQuery(key);
-  }) as any;
-  return statusHandler(c);
-});
+// Root endpoint - dashboard page (HTML)
+app.get('/', dashboardHandler);
 
 // Health check endpoint
 app.get('/health', healthHandler);
@@ -70,6 +70,17 @@ app.get('/admin/allowed-repos', getAllowedReposHandler);
 app.post('/admin/allowed-repos', addAllowedRepoHandler);
 app.delete('/admin/allowed-repos/:owner/:repo', removeAllowedRepoHandler);
 app.get('/allowed-repos/:owner/:repo', checkAllowedRepoHandler);
+
+// OAuth authentication endpoints
+app.get('/auth/login', loginHandler);
+app.get('/auth/callback', callbackHandler);
+app.post('/auth/logout', logoutHandler);
+app.get('/auth/user', userHandler);
+
+// Protected API endpoints (require authentication)
+app.get('/api/user/repos', requireAuth, getUserRepos);
+app.post('/api/user/repos/:owner/:repo/enable', requireAuth, enableRepo);
+app.delete('/api/user/repos/:owner/:repo/enable', requireAuth, disableRepo);
 
 // 404 handler
 app.notFound((c) => {

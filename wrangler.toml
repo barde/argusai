@@ -15,6 +15,7 @@ GITHUB_MODEL = "gpt-4o-mini"
 LOG_LEVEL = "info"
 MAX_DIFF_SIZE = "500000"  # 500KB default
 CONCURRENT_FILE_REVIEWS = "3"  # Review 3 files in parallel
+UPDATE_EXISTING_REVIEWS = "true"  # Update existing reviews instead of creating new ones
 
 [observability]
 enabled = true

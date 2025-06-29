@@ -50,6 +50,17 @@ export interface ReviewMetadata {
   tokensUsed: number;
   processingTime: number;
   reviewVersion: string;
+  reviewIteration?: number; // Track how many times this PR has been reviewed
+  previousReviewId?: number; // ID of the previous review if this is an update
+  editReason?: string; // Reason for updating the review
+  features?: {
+    chunked: boolean; // Whether chunked review was used
+    filesAnalyzed: number; // Number of files actually analyzed
+    filesSkipped: number; // Number of files skipped
+    continuationComments?: number; // Number of continuation comments posted
+  };
+  timestamp?: number; // When the review was created
+  diffSize?: number; // Size of the diff analyzed
 }
 
 export type { PullRequestEvent, PullRequest };

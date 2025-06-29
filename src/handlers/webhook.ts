@@ -3,7 +3,12 @@ import { validateWebhookSignature } from '../utils/crypto';
 import { isDuplicateEvent } from '../utils/deduplication';
 import { checkRateLimit } from '../utils/rateLimit';
 import type { Env } from '../types/env';
-import type { GitHubWebhookHeaders, PullRequestEvent } from '../types/github';
+import type {
+  GitHubWebhookHeaders,
+  WebhookPayload,
+  PullRequestEvent,
+  IssueCommentEvent,
+} from '../types/github';
 import { processReviewWithRetry } from '../services/review-processor';
 import { StorageServiceFactory } from '../storage';
 
@@ -46,22 +51,26 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
     console.log('=== WEBHOOK SIGNATURE VALID ===');
 
     // Parse payload
-    const payload = JSON.parse(body) as PullRequestEvent;
+    let payload = JSON.parse(body) as WebhookPayload;
     const eventType = headers['x-github-event'];
     const deliveryId = headers['x-github-delivery'] || crypto.randomUUID();
 
     console.log('=== WEBHOOK PAYLOAD ===', {
       event: eventType,
       action: payload.action,
-      pr: payload.pull_request?.number,
+      pr: 'pull_request' in payload ? payload.pull_request?.number : undefined,
       repo: payload.repository?.full_name,
-      draft: payload.pull_request?.draft,
+      draft: 'pull_request' in payload ? payload.pull_request?.draft : undefined,
       installation: payload.installation?.id,
     });
 
-    // Only process pull request events and review requests
-    if (eventType !== 'pull_request' && eventType !== 'pull_request_review') {
-      console.log('=== EVENT IGNORED (not PR or review) ===', { eventType });
+    // Only process pull request events, review requests, and issue comments
+    if (
+      eventType !== 'pull_request' &&
+      eventType !== 'pull_request_review' &&
+      eventType !== 'issue_comment'
+    ) {
+      console.log('=== EVENT IGNORED (not PR, review, or comment) ===', { eventType });
       return c.json({ message: 'Event ignored' }, 200);
     }
 
@@ -87,8 +96,88 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
       }
     }
 
+    // Parse repository info early for all event types
+    const [owner, repo] = payload.repository.full_name.split('/');
+    if (!owner || !repo) {
+      console.log('=== INVALID REPOSITORY NAME ===', {
+        repository: payload.repository.full_name,
+      });
+      return c.json({ message: 'Invalid repository name' }, 400);
+    }
+
+    // Handle @mention in issue comments (PRs are also issues in GitHub)
+    if (eventType === 'issue_comment') {
+      const commentPayload = payload as IssueCommentEvent;
+
+      // Only process created comments on PRs
+      if (commentPayload.action !== 'created' || !commentPayload.issue.pull_request) {
+        console.log('=== COMMENT IGNORED (not created or not on PR) ===', {
+          action: commentPayload.action,
+          isPR: !!commentPayload.issue.pull_request,
+        });
+        return c.json({ message: 'Comment ignored' }, 200);
+      }
+
+      const comment = commentPayload.comment?.body || '';
+      const mentionPattern = /@argusai\s+(review|skip)(?:\s+(security|performance|style))?/i;
+      const match = comment.match(mentionPattern);
+
+      if (!match) {
+        console.log('=== COMMENT IGNORED (no ArgusAI mention) ===');
+        return c.json({ message: 'No ArgusAI mention found' }, 200);
+      }
+
+      const command = match[1]!.toLowerCase();
+      const reviewType = match[2]?.toLowerCase() || 'full';
+      console.log('=== ARGUSAI MENTION DETECTED ===', {
+        command,
+        reviewType,
+        pr: commentPayload.issue.number,
+        commenter: commentPayload.comment.user?.login || 'unknown',
+      });
+
+      // For skip command, just acknowledge
+      if (command === 'skip') {
+        // TODO: Implement skip logic
+        return c.json({ message: 'Skip command acknowledged' }, 200);
+      }
+
+      // For review command, fetch the full PR data
+      const { GitHubAPIService } = await import('../services/github-api');
+      const githubApi = new GitHubAPIService(c.env, commentPayload.installation?.id || 0);
+
+      try {
+        const pullRequest = await githubApi.getPullRequest(
+          owner,
+          repo,
+          commentPayload.issue.number
+        );
+
+        // Convert to PullRequestEvent format for processing
+        const prPayload: PullRequestEvent = {
+          action: 'opened', // Use a valid action
+          number: commentPayload.issue.number,
+          pull_request: pullRequest as any,
+          repository: commentPayload.repository,
+          installation: commentPayload.installation,
+          organization: commentPayload.organization,
+          sender: commentPayload.sender,
+        };
+
+        // Store review type in metadata
+        (prPayload as any).reviewType = reviewType;
+        (prPayload as any).triggeredBy = 'mention';
+
+        // Replace payload with PR event payload
+        payload = prPayload;
+      } catch (error) {
+        console.error('Failed to fetch PR data:', error);
+        return c.json({ error: 'Failed to fetch pull request' }, 500);
+      }
+    }
+
     // Skip draft PRs
-    if (payload.pull_request.draft) {
+    if ('pull_request' in payload && payload.pull_request?.draft) {
       return c.json({ message: 'Draft PR ignored' }, 200);
     }
 
@@ -99,15 +188,6 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
     // Check if repository is on the allowed list
     const { AllowedReposService } = await import('../storage/allowed-repos');
     const allowedRepos = new AllowedReposService(c.env.CONFIG);
-
-    const [owner, repo] = payload.repository.full_name.split('/');
-    if (!owner || !repo) {
-      console.log('=== INVALID REPOSITORY NAME ===', {
-        repository: payload.repository.full_name,
-      });
-      return c.json({ message: 'Invalid repository name' }, 400);
-    }
-
     const isAllowed = await allowedRepos.isAllowed(owner, repo);
 
     if (!isAllowed) {
@@ -118,11 +198,14 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
       return c.json({ message: 'Repository not on allowed list' }, 200);
     }
 
+    // At this point, payload should be a PullRequestEvent
+    const prPayload = payload as PullRequestEvent;
+
     // Check for duplicate events
     const isDupe = await isDuplicateEvent(
       storage,
-      payload.repository.full_name,
-      payload.pull_request.number,
+      prPayload.repository.full_name,
+      prPayload.pull_request.number,
       deliveryId
     );
 
@@ -139,22 +222,22 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
 
     // Save webhook info for debugging
     const { saveDebugWebhook } = await import('./debug');
-    await saveDebugWebhook(c.env, payload);
+    await saveDebugWebhook(c.env, prPayload);
 
     // Process the review asynchronously using event.waitUntil
     // This allows us to return a response immediately while processing continues
     // Return response immediately for fast webhook processing
     // The actual review processing happens asynchronously with retry logic
     c.executionCtx.waitUntil(
-      processReviewWithRetry(c.env, payload, deliveryId).catch(async (error) => {
+      processReviewWithRetry(c.env, prPayload, deliveryId).catch(async (error) => {
         console.error('=== ASYNC PROCESSING ERROR ===', error);
         const { saveDebugError } = await import('./debug');
         await saveDebugError(c.env, error, {
           event: 'webhook_async_error',
           payload: {
-            action: payload.action,
-            pr: payload.pull_request?.number,
-            repo: payload.repository?.full_name,
+            action: prPayload.action,
+            pr: prPayload.pull_request?.number,
+            repo: prPayload.repository?.full_name,
           },
         });
       })
@@ -163,9 +246,9 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
     // Log webhook response time (should be <50ms)
     const processingTime = Date.now() - startTime;
     console.log(`Webhook responded in ${processingTime}ms`, {
-      repository: payload.repository.full_name,
-      pr: payload.pull_request.number,
-      action: payload.action,
+      repository: prPayload.repository.full_name,
+      pr: prPayload.pull_request.number,
+      action: prPayload.action,
       deliveryId,
     });
 

@@ -25,7 +25,9 @@ Intelligent GitHub code review bot powered by LLMs, deployed on Cloudflare Worke
 - [**API Documentation**](https://editor.swagger.io/?url=https://raw.githubusercontent.com/barde/argusai/master/argusai-openapi.yaml) - Interactive OpenAPI specification
 - [**Architecture Overview**](github-llm-code-review-bot.md) - Detailed technical documentation
 - [**API Reference**](API.md) - Quick API endpoint reference
-- [**Reviewer Assignment Mode**](docs/reviewer-assignment-mode.md) - Setup guide for reviewer-triggered reviews
+- [**Setup Guide**](docs/setup-guide.md) - How to configure ArgusAI for your repository
+- [**Reviewer Assignment Mode**](docs/reviewer-assignment-mode.md) - Detailed technical documentation
+- [**Usage Examples**](examples/trigger-review.md) - Examples of triggering reviews
 
 ## 🔍 Monitoring & Status
 

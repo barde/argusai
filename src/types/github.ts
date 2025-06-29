@@ -1,4 +1,4 @@
-import type { PullRequestEvent, PullRequest } from '@octokit/webhooks-types';
+import type { PullRequestEvent, PullRequest, IssueCommentEvent } from '@octokit/webhooks-types';
 
 export interface GitHubWebhookHeaders {
   'x-hub-signature-256'?: string;
@@ -63,5 +63,5 @@ export interface ReviewMetadata {
   diffSize?: number; // Size of the diff analyzed
 }
 
-export type { PullRequestEvent, PullRequest };
-export type WebhookPayload = PullRequestEvent;
+export type { PullRequestEvent, PullRequest, IssueCommentEvent };
+export type WebhookPayload = PullRequestEvent | IssueCommentEvent;

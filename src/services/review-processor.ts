@@ -1,5 +1,5 @@
 import type { Env } from '../types/env';
-import type { WebhookPayload } from '../types/github';
+import type { PullRequestEvent } from '../types/github';
 import { Logger } from '../utils/logger';
 import { ReviewData } from '../types/review';
 import type { GitHubAPIService } from './github-api';
@@ -168,7 +168,7 @@ async function performChunkedReview(
 
 export async function processReviewWithRetry(
   env: Env,
-  payload: WebhookPayload,
+  payload: PullRequestEvent,
   deliveryId: string
 ): Promise<void> {
   const maxAttempts = 3;

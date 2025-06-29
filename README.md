@@ -60,7 +60,17 @@ git clone https://github.com/barde/argusai.git
 cd argusai
 npm install
 wrangler login
-wrangler secret put GITHUB_TOKEN
+
+# Set your GitHub token (for Models API)
+wrangler secret put GITHUB_TOKEN --env production
+
+# Set your GitHub App private key (auto-converts to PKCS#8 if needed)
+./scripts/convert-github-private-key.sh ~/path/to/github-app-key.pem
+
+# Set webhook secret
+wrangler secret put GITHUB_WEBHOOK_SECRET --env production
+
+# Deploy
 wrangler deploy --env production
 ```
 

@@ -25,5 +25,26 @@ The ArgusAI API provides endpoints for:
 - **Webhook Processing**: GitHub webhook events for pull request analysis
 - **Health Monitoring**: Service health and dependency status
 - **Configuration Management**: Repository-specific review settings
+- **Allowed Repository Management**: Control which repositories can use ArgusAI
 
 For the complete API specification, see [argusai-openapi.yaml](./argusai-openapi.yaml).
+
+## Quick Reference
+
+### Public Endpoints
+- `GET /` - Status page (HTML)
+- `GET /health` - Health check
+- `GET /status` - Detailed status (JSON)
+- `GET /allowed-repos/:owner/:repo` - Check if repository is allowed
+
+### Admin Endpoints (Requires Bearer Token)
+- `GET /admin/allowed-repos` - List all allowed repositories
+- `POST /admin/allowed-repos` - Add repository to allowed list
+- `DELETE /admin/allowed-repos/:owner/:repo` - Remove repository from allowed list
+
+### Configuration Endpoints (Requires Bearer Token)
+- `GET /config/:owner/:repo` - Get repository configuration
+- `PUT /config/:owner/:repo` - Update repository configuration
+
+### Webhook Endpoint
+- `POST /webhooks/github` - GitHub webhook receiver (signature validated)

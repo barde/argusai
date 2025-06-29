@@ -59,26 +59,64 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
       installation: payload.installation?.id,
     });
 
-    // Only process pull request events
-    if (eventType !== 'pull_request') {
-      console.log('=== EVENT IGNORED (not PR) ===', { eventType });
+    // Only process pull request events and review requests
+    if (eventType !== 'pull_request' && eventType !== 'pull_request_review') {
+      console.log('=== EVENT IGNORED (not PR or review) ===', { eventType });
       return c.json({ message: 'Event ignored' }, 200);
     }
 
-    // Only process specific actions
-    const supportedActions = ['opened', 'synchronize', 'edited', 'ready_for_review'];
-    if (!supportedActions.includes(payload.action)) {
-      return c.json({ message: 'Action ignored' }, 200);
+    // For pull_request events, only process review_requested action
+    if (eventType === 'pull_request') {
+      if (payload.action !== 'review_requested') {
+        console.log('=== ACTION IGNORED (not review_requested) ===', { action: payload.action });
+        return c.json({ message: 'Action ignored - waiting for review request' }, 200);
+      }
+
+      // Check if ArgusAI was requested as a reviewer
+      const requestedReviewer = (payload as any).requested_reviewer;
+      if (
+        !requestedReviewer ||
+        requestedReviewer.type !== 'Bot' ||
+        !requestedReviewer.login?.includes('argusai')
+      ) {
+        console.log('=== REVIEW REQUEST IGNORED (not for ArgusAI) ===', {
+          reviewer: requestedReviewer?.login,
+          type: requestedReviewer?.type,
+        });
+        return c.json({ message: 'Review request not for ArgusAI' }, 200);
+      }
     }
 
-    // Skip draft PRs unless they're marked ready
-    if (payload.pull_request.draft && payload.action !== 'ready_for_review') {
+    // Skip draft PRs
+    if (payload.pull_request.draft) {
       return c.json({ message: 'Draft PR ignored' }, 200);
     }
 
     // Initialize storage service
     const storageFactory = new StorageServiceFactory();
     const storage = storageFactory.create(c.env);
+
+    // Check if repository is on the allowed list
+    const { AllowedReposService } = await import('../storage/allowed-repos');
+    const allowedRepos = new AllowedReposService(c.env.CONFIG);
+
+    const [owner, repo] = payload.repository.full_name.split('/');
+    if (!owner || !repo) {
+      console.log('=== INVALID REPOSITORY NAME ===', {
+        repository: payload.repository.full_name,
+      });
+      return c.json({ message: 'Invalid repository name' }, 400);
+    }
+
+    const isAllowed = await allowedRepos.isAllowed(owner, repo);
+
+    if (!isAllowed) {
+      console.log('=== REPOSITORY NOT ALLOWED ===', {
+        repository: payload.repository.full_name,
+        action: payload.action,
+      });
+      return c.json({ message: 'Repository not on allowed list' }, 200);
+    }
 
     // Check for duplicate events
     const isDupe = await isDuplicateEvent(

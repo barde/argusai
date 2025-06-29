@@ -17,12 +17,15 @@ Intelligent GitHub code review bot powered by LLMs, deployed on Cloudflare Worke
 - **Smart Caching** - Intelligent review caching to minimize API calls
 - **Zero Infrastructure** - No servers to manage, scales automatically
 - **Free Tier Optimized** - Runs completely free for most teams
+- **Reviewer Assignment Mode** - Only comments when explicitly assigned as reviewer
+- **Repository Allowlist** - Control which repositories can use ArgusAI
 
 ## 📚 Documentation
 
 - [**API Documentation**](https://editor.swagger.io/?url=https://raw.githubusercontent.com/barde/argusai/master/argusai-openapi.yaml) - Interactive OpenAPI specification
 - [**Architecture Overview**](github-llm-code-review-bot.md) - Detailed technical documentation
 - [**API Reference**](API.md) - Quick API endpoint reference
+- [**Reviewer Assignment Mode**](docs/reviewer-assignment-mode.md) - Setup guide for reviewer-triggered reviews
 
 ## 🔍 Monitoring & Status
 
@@ -61,6 +64,20 @@ wrangler deploy --env production
 
 ### 4. Install on Repository
 Install the ArgusAI app on your repositories and watch it review PRs instantly!
+
+### 5. Configure Reviewer Assignment Mode (Optional)
+ArgusAI can be configured to only comment when explicitly assigned as a reviewer:
+
+```bash
+# Add repository to allowed list
+curl -X POST https://argus.vogel.yoga/admin/allowed-repos \
+  -H "Authorization: Bearer YOUR_GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "your-org", "repo": "your-repo"}'
+
+# Assign ArgusAI as reviewer on a PR
+# In GitHub: Click "Reviewers" → Select "argusai[bot]"
+```
 
 ## 🛠️ Tech Stack
 

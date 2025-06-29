@@ -116,6 +116,16 @@ cpu_ms = 50  # Limit CPU time per request
 name = "argusai-dev"
 vars = { ENVIRONMENT = "development", LOG_LEVEL = "debug" }
 
+# Cloudflare Preview Deployments
+# Automatically creates preview URLs for every commit
+[deployment]
+# Preview deployments inherit from production but with debug logging
+preview_environment = "production"
+
+# Override some settings for previews
+[env.preview]
+vars = { LOG_LEVEL = "debug" }
+
 # Logpush configuration for better log collection
 # Note: Logpush requires enterprise plan
 # For free tier, use wrangler tail for real-time logs

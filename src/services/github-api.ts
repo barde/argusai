@@ -395,22 +395,37 @@ export class GitHubAPIService {
    */
   async testAppAuth(): Promise<{ success: boolean; appSlug?: string; error?: string }> {
     try {
-      // Create a new Octokit instance with app authentication
-      const appOctokit = new Octokit({
-        authStrategy: createAppAuth,
-        auth: {
-          appId: this.env.GITHUB_APP_ID,
-          privateKey: this.env.GITHUB_APP_PRIVATE_KEY,
+      // Create a minimal JWT for app authentication test
+      const jwt = createAppAuth({
+        appId: this.env.GITHUB_APP_ID,
+        privateKey: this.env.GITHUB_APP_PRIVATE_KEY,
+      });
+
+      // Get JWT token
+      const auth = await jwt({ type: 'app' });
+
+      // Test the JWT by getting app info
+      const response = await fetch('https://api.github.com/app', {
+        headers: {
+          Authorization: `Bearer ${auth.token}`,
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'ArgusAI',
         },
       });
 
-      // Get app info using JWT authentication
-      const { data } = await appOctokit.apps.getAuthenticated();
-
-      return {
-        success: true,
-        appSlug: data?.slug || 'unknown',
-      };
+      if (response.ok) {
+        const data: any = await response.json();
+        return {
+          success: true,
+          appSlug: data.slug || 'unknown',
+        };
+      } else {
+        const errorText = await response.text();
+        return {
+          success: false,
+          error: `GitHub API error: ${response.status} - ${errorText}`,
+        };
+      }
     } catch (error: any) {
       logger.error('GitHub App auth test failed', error);
       return {

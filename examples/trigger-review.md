@@ -6,13 +6,13 @@ This document shows various ways to trigger ArgusAI code reviews.
 
 1. **Add ArgusAI as Collaborator** (one-time setup)
    ```
-   Settings → Manage access → Add people → Search "argusai[bot]" → Add with Write permission
+   Settings → Manage access → Add people → Search "argus-ai-assistant[bot]" → Add with Write permission
    ```
 
 2. **Request Review**
    - Open any Pull Request
    - Click "Reviewers" in the right sidebar
-   - Select `argusai[bot]`
+   - Select `argus-ai-assistant[bot]`
    - ArgusAI will review within ~30 seconds
 
 ## Method 2: @Mention Commands
@@ -21,29 +21,29 @@ Post a comment on any open PR with one of these commands:
 
 ### Basic Review
 ```
-@argusai review
+@argus-ai-assistant review
 ```
 *Triggers a comprehensive code review*
 
 ### Focused Reviews
 ```
-@argusai review security
+@argus-ai-assistant review security
 ```
 *Focuses on security vulnerabilities*
 
 ```
-@argusai review performance
+@argus-ai-assistant review performance
 ```
 *Focuses on performance issues*
 
 ```
-@argusai review style
+@argus-ai-assistant review style
 ```
 *Focuses on code style and best practices*
 
 ### Skip Review
 ```
-@argusai skip
+@argus-ai-assistant skip
 ```
 *Prevents ArgusAI from reviewing this PR (useful if automatic reviews are enabled)*
 
@@ -52,7 +52,7 @@ Post a comment on any open PR with one of these commands:
 ```markdown
 Hey team, I've made the requested changes to the authentication system.
 
-@argusai review security
+@argus-ai-assistant review security
 
 Can someone also do a manual review focusing on the business logic?
 ```
@@ -65,7 +65,7 @@ Can someone also do a manual review focusing on the business logic?
 # Request review from ArgusAI
 gh pr view 123 --json url -q .url | xargs -I {} gh api -X POST \
   repos/OWNER/REPO/pulls/123/requested_reviewers \
-  --field 'reviewers[]=argusai[bot]'
+  --field 'reviewers[]=argus-ai-assistant[bot]'
 ```
 
 ### Using cURL
@@ -76,7 +76,7 @@ curl -X POST \
   -H "Authorization: token YOUR_GITHUB_TOKEN" \
   -H "Accept: application/vnd.github.v3+json" \
   https://api.github.com/repos/OWNER/REPO/issues/PR_NUMBER/comments \
-  -d '{"body":"@argusai review"}'
+  -d '{"body":"@argus-ai-assistant review"}'
 ```
 
 ### Using GitHub Actions
@@ -95,7 +95,7 @@ jobs:
         run: |
           gh api -X POST \
             repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers \
-            --field 'reviewers[]=argusai[bot]'
+            --field 'reviewers[]=argus-ai-assistant[bot]'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -121,6 +121,6 @@ jobs:
 
 ### Common Issues
 
-- **"argusai[bot] not found"** - Bot needs to be added as collaborator first
-- **No response to @mention** - Ensure exact syntax `@argusai review`
+- **"argus-ai-assistant[bot] not found"** - Bot needs to be added as collaborator first
+- **No response to @mention** - Ensure exact syntax `@argus-ai-assistant review`
 - **Repository not allowed** - Contact admin to add to allowlist

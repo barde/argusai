@@ -18,15 +18,15 @@ This method allows you to select ArgusAI from the GitHub reviewer dropdown.
 1. Go to your repository on GitHub
 2. Click **Settings** → **Manage access**
 3. Click **Add people**
-4. Search for `argusai[bot]`
-5. Select the bot and click **Add argusai[bot] to this repository**
+4. Search for `argus-ai-assistant[bot]`
+5. Select the bot and click **Add argus-ai-assistant[bot] to this repository**
 6. Choose **Write** permission (required for posting reviews)
 
 #### Step 2: Request Review from ArgusAI
 
 1. Open any Pull Request
 2. In the right sidebar, click **Reviewers**
-3. Search for `argusai[bot]`
+3. Search for `argus-ai-assistant[bot]`
 4. Select it to request a review
 
 ArgusAI will automatically analyze your PR and post a review within seconds.
@@ -40,16 +40,16 @@ If you prefer not to add ArgusAI as a collaborator, you can trigger reviews usin
 1. Open any Pull Request
 2. Post a comment mentioning ArgusAI:
    ```
-   @argusai review
+   @argus-ai-assistant review
    ```
 3. ArgusAI will analyze the PR and post its review
 
 #### Supported Commands
 
-- `@argusai review` - Trigger a full code review
-- `@argusai review security` - Focus on security issues
-- `@argusai review performance` - Focus on performance issues
-- `@argusai skip` - Exclude this PR from automatic reviews (if enabled)
+- `@argus-ai-assistant review` - Trigger a full code review
+- `@argus-ai-assistant review security` - Focus on security issues
+- `@argus-ai-assistant review performance` - Focus on performance issues
+- `@argus-ai-assistant skip` - Exclude this PR from automatic reviews (if enabled)
 
 ## Repository Allowlist
 
@@ -103,7 +103,7 @@ Contact your ArgusAI administrator to add your repository to the allowed list.
 **Problem**: @mention doesn't trigger a review
 
 **Possible Causes**:
-1. **Not using exact mention** - Must be `@argusai` (lowercase)
+1. **Not using exact mention** - Must be `@argus-ai-assistant` (lowercase)
 2. **Comment on closed PR** - Only works on open PRs
 3. **Repository not allowed** - Check allowlist status
 
@@ -126,7 +126,7 @@ Contact your ArgusAI administrator to add your repository to the allowed list.
 1. Go to Settings → Branches
 2. Add rule for your default branch
 3. Enable "Require pull request reviews"
-4. Optionally add `argusai[bot]` as a required reviewer
+4. Optionally add `argus-ai-assistant[bot]` as a required reviewer
 
 ## Security Considerations
 
@@ -144,7 +144,7 @@ For automated workflows, you can trigger ArgusAI programmatically:
 ```bash
 # Request review via API
 gh api -X POST repos/OWNER/REPO/pulls/PR_NUMBER/requested_reviewers \
-  --field 'reviewers[]=argusai[bot]'
+  --field 'reviewers[]=argus-ai-assistant[bot]'
 ```
 
 ### Using GitHub Actions
@@ -162,7 +162,7 @@ jobs:
       - name: Request ArgusAI Review
         run: |
           gh api -X POST repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers \
-            --field 'reviewers[]=argusai[bot]'
+            --field 'reviewers[]=argus-ai-assistant[bot]'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```

@@ -86,7 +86,7 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
       if (
         !requestedReviewer ||
         requestedReviewer.type !== 'Bot' ||
-        !requestedReviewer.login?.includes('argusai')
+        !requestedReviewer.login?.includes('argus-ai-assistant')
       ) {
         console.log('=== REVIEW REQUEST IGNORED (not for ArgusAI) ===', {
           reviewer: requestedReviewer?.login,
@@ -119,7 +119,8 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
       }
 
       const comment = commentPayload.comment?.body || '';
-      const mentionPattern = /@argusai\s+(review|skip)(?:\s+(security|performance|style))?/i;
+      const mentionPattern =
+        /@argus-ai-assistant\s+(review|skip)(?:\s+(security|performance|style))?/i;
       const match = comment.match(mentionPattern);
 
       if (!match) {

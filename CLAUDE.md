@@ -51,6 +51,21 @@ wrangler secret put GITHUB_TOKEN  # GitHub PAT with models:read scope
 wrangler deploy --env production
 ```
 
+#### CRITICAL: GitHub App Private Key Format
+**GitHub provides private keys in PKCS#1 format, but ArgusAI requires PKCS#8 format.**
+
+When setting GITHUB_APP_PRIVATE_KEY:
+1. Get your private key from GitHub App settings
+2. Convert it to PKCS#8:
+   ```bash
+   # Save GitHub's key to private-key-pkcs1.pem, then:
+   openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in private-key-pkcs1.pem -out private-key-pkcs8.pem
+   
+   # Set the converted key:
+   cat private-key-pkcs8.pem | wrangler secret put GITHUB_APP_PRIVATE_KEY --env production
+   ```
+3. PKCS#8 keys start with `-----BEGIN PRIVATE KEY-----` (not `RSA PRIVATE KEY`)
+
 ### Logging and Debugging
 
 #### View Real-Time Logs

@@ -29,11 +29,42 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
   // Check GitHub App Private Key
   try {
     const hasPrivateKey = !!c.env.GITHUB_APP_PRIVATE_KEY;
-    checks.push({
-      name: 'GitHub App Private Key',
-      status: hasPrivateKey ? 'ok' : 'error',
-      message: hasPrivateKey ? 'Configured' : 'Missing',
-    });
+    if (hasPrivateKey) {
+      // Check key format
+      const keyStart = c.env.GITHUB_APP_PRIVATE_KEY.substring(0, 50);
+      const isPKCS8 = keyStart.includes('BEGIN PRIVATE KEY');
+      const isPKCS1 = keyStart.includes('BEGIN RSA PRIVATE KEY');
+
+      if (isPKCS8) {
+        checks.push({
+          name: 'GitHub App Private Key',
+          status: 'ok',
+          message: 'Configured (PKCS#8 format)',
+        });
+      } else if (isPKCS1) {
+        checks.push({
+          name: 'GitHub App Private Key',
+          status: 'error',
+          message: 'Wrong format (PKCS#1)',
+          details: 'GitHub provides keys in PKCS#1 format, but ArgusAI requires PKCS#8',
+          solution:
+            'Convert using: openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in key.pem -out key-pkcs8.pem',
+        });
+      } else {
+        checks.push({
+          name: 'GitHub App Private Key',
+          status: 'error',
+          message: 'Invalid key format',
+          details: 'Key does not appear to be a valid PEM-encoded private key',
+        });
+      }
+    } else {
+      checks.push({
+        name: 'GitHub App Private Key',
+        status: 'error',
+        message: 'Missing',
+      });
+    }
   } catch (error) {
     checks.push({
       name: 'GitHub App Private Key',
@@ -105,6 +136,45 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
       message: 'Error checking secret',
       details: error instanceof Error ? error.message : 'Unknown error',
     });
+  }
+
+  // Test GitHub App Authentication (if PKCS#8 key is present)
+  const isPKCS8Key = c.env.GITHUB_APP_PRIVATE_KEY?.includes('BEGIN PRIVATE KEY');
+  if (isPKCS8Key && c.env.GITHUB_APP_ID && c.env.GITHUB_APP_PRIVATE_KEY) {
+    try {
+      const { GitHubAPIService } = await import('../services/github-api');
+      // Use a dummy installation ID for testing App authentication
+      const githubApi = new GitHubAPIService(c.env, 0);
+
+      // Try to get app info (this will test JWT generation)
+      const testResult = await githubApi.testAppAuth();
+
+      if (testResult.success) {
+        checks.push({
+          name: 'GitHub App Authentication',
+          status: 'ok',
+          message: `Authenticated as ${testResult.appSlug}`,
+          details: {
+            appId: c.env.GITHUB_APP_ID,
+            appSlug: testResult.appSlug,
+          },
+        });
+      } else {
+        checks.push({
+          name: 'GitHub App Authentication',
+          status: 'error',
+          message: 'Authentication failed',
+          details: testResult.error,
+        });
+      }
+    } catch (error: any) {
+      checks.push({
+        name: 'GitHub App Authentication',
+        status: 'error',
+        message: 'Failed to test authentication',
+        details: error.message || 'Unknown error',
+      });
+    }
   }
 
   // Check KV Namespaces

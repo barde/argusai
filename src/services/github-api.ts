@@ -18,8 +18,10 @@ interface ExistingReview {
 
 export class GitHubAPIService {
   private octokit: Octokit;
+  private env: Env;
 
   constructor(env: Env, installationId: number) {
+    this.env = env;
     logger.info('=== GITHUB API INIT ===', {
       appId: env.GITHUB_APP_ID,
       installationId,
@@ -384,6 +386,37 @@ export class GitHubAPIService {
         existingReviewId,
       });
       throw error;
+    }
+  }
+
+  /**
+   * Test GitHub App authentication by attempting to get app info
+   * Used by the status page to verify key format and authentication
+   */
+  async testAppAuth(): Promise<{ success: boolean; appSlug?: string; error?: string }> {
+    try {
+      // Create a new Octokit instance with app authentication
+      const appOctokit = new Octokit({
+        authStrategy: createAppAuth,
+        auth: {
+          appId: this.env.GITHUB_APP_ID,
+          privateKey: this.env.GITHUB_APP_PRIVATE_KEY,
+        },
+      });
+
+      // Get app info using JWT authentication
+      const { data } = await appOctokit.apps.getAuthenticated();
+
+      return {
+        success: true,
+        appSlug: data?.slug || 'unknown',
+      };
+    } catch (error: any) {
+      logger.error('GitHub App auth test failed', error);
+      return {
+        success: false,
+        error: error.message || 'Unknown error',
+      };
     }
   }
 }

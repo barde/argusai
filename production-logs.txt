@@ -1,0 +1,5 @@
+
+ ⛅️ wrangler 4.22.0
+───────────────────
+Successfully created tail, expires at 2025-06-29T20:29:33Z
+Connected to argusai-production, waiting for logs...

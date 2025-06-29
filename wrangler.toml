@@ -3,10 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Production configuration (single deployment)
-routes = [
-  { pattern = "argus.vogel.yoga/*", zone_name = "vogel.yoga" }
-]
+# Base configuration - use environments for deployment-specific settings
 
 [vars]
 ENVIRONMENT = "production"
@@ -63,9 +60,44 @@ id = "6155db907791462998569c559e71a8cd"
 # - SENTRY_DSN: For error tracking
 # - SLACK_WEBHOOK_URL: For notifications
 
+# Production environment configuration
+[env.production]
+name = "argusai-production"
+routes = [
+  { pattern = "argus.vogel.yoga/*", zone_name = "vogel.yoga" }
+]
+
+# Copy vars to production environment
+[env.production.vars]
+ENVIRONMENT = "production"
+GITHUB_APP_ID = "1454778"
+GITHUB_MODEL = "gpt-4o-mini"
+LOG_LEVEL = "info"
+MAX_DIFF_SIZE = "500000"  # 500KB default
+CONCURRENT_FILE_REVIEWS = "3"  # Review 3 files in parallel
+UPDATE_EXISTING_REVIEWS = "true"  # Update existing reviews instead of creating new ones
+
+# Copy KV namespaces to production environment
+[[env.production.kv_namespaces]]
+binding = "CACHE"
+id = "df70afec18184e6da7a50bad00cbae45"
+
+[[env.production.kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "3f9fae87dddd4751823a13ce49dfa81c"
+
+[[env.production.kv_namespaces]]
+binding = "CONFIG"
+id = "6155db907791462998569c559e71a8cd"
+
 # Performance settings
 [env.production.performance]
 cpu_ms = 50  # Limit CPU time per request
+
+# Development environment configuration
+[env.development]
+name = "argusai-dev"
+vars = { ENVIRONMENT = "development", LOG_LEVEL = "debug" }
 
 # Logpush configuration for better log collection
 # Note: Logpush requires enterprise plan

@@ -15,6 +15,8 @@ ArgusAI is an intelligent code review bot that automatically analyzes pull reque
 - **Review Summary**: Provides high-level PR assessment
 - **Edge Deployment**: Zero cold starts with global distribution via Cloudflare Workers
 - **Real-time Processing**: Sub-second webhook processing at the edge
+- **Reviewer Assignment Mode**: Only reviews when explicitly assigned as a reviewer
+- **Repository Allowlist**: Fine-grained control over which repositories can use ArgusAI
 
 ### Value Proposition
 - Reduces code review turnaround time to seconds

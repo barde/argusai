@@ -36,6 +36,12 @@ tags:
   - name: config
     description: Configuration management
     x-displayName: Configuration
+  - name: admin
+    description: Administrative endpoints
+    x-displayName: Admin
+  - name: public
+    description: Public endpoints
+    x-displayName: Public
 
 paths:
   /webhooks/github:
@@ -203,6 +209,141 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /admin/allowed-repos:
+    get:
+      operationId: getAllowedRepos
+      summary: List allowed repositories
+      description: Get all repositories on the allowed list
+      tags:
+        - admin
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of allowed repositories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  repositories:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AllowedRepository'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    
+    post:
+      operationId: addAllowedRepo
+      summary: Add allowed repository
+      description: Add a repository to the allowed list
+      tags:
+        - admin
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - owner
+                - repo
+              properties:
+                owner:
+                  type: string
+                repo:
+                  type: string
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Repository added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  repository:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/allowed-repos/{owner}/{repo}:
+    delete:
+      operationId: removeAllowedRepo
+      summary: Remove allowed repository
+      description: Remove a repository from the allowed list
+      tags:
+        - admin
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: owner
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: repo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Repository removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  repository:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /allowed-repos/{owner}/{repo}:
+    get:
+      operationId: checkAllowedRepo
+      summary: Check if repository is allowed
+      description: Check if a specific repository is on the allowed list
+      tags:
+        - public
+      parameters:
+        - name: owner
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: repo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Repository status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  repository:
+                    type: string
+                  allowed:
+                    type: boolean
 
 components:
   securitySchemes:
@@ -438,6 +579,29 @@ components:
             processing:
               type: string
               enum: [operational, degraded, down]
+
+    AllowedRepository:
+      type: object
+      required:
+        - owner
+        - repo
+        - addedAt
+      properties:
+        owner:
+          type: string
+          description: Repository owner
+        repo:
+          type: string
+          description: Repository name
+        addedAt:
+          type: integer
+          description: Unix timestamp when added
+        addedBy:
+          type: string
+          description: Who added this repository
+        reason:
+          type: string
+          description: Reason for adding this repository
 
     RepositoryConfig:
       type: object

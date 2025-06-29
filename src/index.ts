@@ -8,6 +8,12 @@ import { debugHandler } from './handlers/debug';
 import { testAuthHandler } from './handlers/test-auth';
 import { testReviewHandler } from './handlers/test-review';
 import { statusHandler } from './handlers/status';
+import {
+  getAllowedReposHandler,
+  addAllowedRepoHandler,
+  removeAllowedRepoHandler,
+  checkAllowedRepoHandler,
+} from './handlers/allowed-repos';
 import type { Env } from './types/env';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -58,6 +64,12 @@ app.post('/webhooks/github', webhookHandler);
 // Configuration endpoints
 app.get('/config/:owner/:repo', configHandler.get);
 app.put('/config/:owner/:repo', configHandler.update);
+
+// Allowed repositories management endpoints
+app.get('/admin/allowed-repos', getAllowedReposHandler);
+app.post('/admin/allowed-repos', addAllowedRepoHandler);
+app.delete('/admin/allowed-repos/:owner/:repo', removeAllowedRepoHandler);
+app.get('/allowed-repos/:owner/:repo', checkAllowedRepoHandler);
 
 // 404 handler
 app.notFound((c) => {

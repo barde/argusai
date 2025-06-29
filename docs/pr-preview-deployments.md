@@ -16,6 +16,7 @@ ArgusAI uses Cloudflare's native preview deployment system to automatically crea
 - Same KV namespaces and secrets as production
 - Automatic cleanup of old preview deployments
 - Preview URLs follow the pattern: `https://{hash}.argusai.pages.dev`
+- Automatic PR comments with deployment status
 
 ## Setup Requirements
 

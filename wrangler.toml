@@ -30,6 +30,15 @@ id = "3f9fae87dddd4751823a13ce49dfa81c"
 binding = "CONFIG"
 id = "6155db907791462998569c559e71a8cd"
 
+# OAuth namespaces
+[[kv_namespaces]]
+binding = "OAUTH_SESSIONS"
+id = "placeholder-sessions-namespace-id"  # Replace with actual ID after creation
+
+[[kv_namespaces]]
+binding = "OAUTH_TOKENS"
+id = "placeholder-tokens-namespace-id"  # Replace with actual ID after creation
+
 # Free Tier: No queues needed
 # Processing happens directly in webhook handler using event.waitUntil()
 
@@ -89,6 +98,14 @@ id = "3f9fae87dddd4751823a13ce49dfa81c"
 [[env.production.kv_namespaces]]
 binding = "CONFIG"
 id = "6155db907791462998569c559e71a8cd"
+
+[[env.production.kv_namespaces]]
+binding = "OAUTH_SESSIONS"
+id = "placeholder-sessions-namespace-id"  # Replace with actual ID after creation
+
+[[env.production.kv_namespaces]]
+binding = "OAUTH_TOKENS"
+id = "placeholder-tokens-namespace-id"  # Replace with actual ID after creation
 
 # Performance settings
 [env.production.performance]

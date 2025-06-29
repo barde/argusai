@@ -76,6 +76,30 @@ export class GitHubAPIService {
     }
   }
 
+  async getFullPullRequest(owner: string, repo: string, pullNumber: number) {
+    try {
+      logger.info('Fetching full pull request', { owner, repo, pullNumber });
+
+      const { data: pr } = await this.octokit.pulls.get({
+        owner,
+        repo,
+        pull_number: pullNumber,
+      });
+
+      return pr;
+    } catch (error) {
+      logger.error('=== GITHUB API ERROR (getFullPullRequest) ===', error as Error, {
+        owner,
+        repo,
+        pullNumber,
+        statusCode: (error as any).status,
+        message: (error as any).message,
+        response: (error as any).response?.data,
+      });
+      throw error;
+    }
+  }
+
   async getPullRequestDiff(owner: string, repo: string, pullNumber: number): Promise<string> {
     try {
       logger.info('Fetching pull request diff', { owner, repo, pullNumber });

@@ -148,7 +148,7 @@ export async function webhookHandler(c: Context<{ Bindings: Env }>) {
       const githubApi = new GitHubAPIService(c.env, commentPayload.installation?.id || 0);
 
       try {
-        const pullRequest = await githubApi.getPullRequest(
+        const pullRequest = await githubApi.getFullPullRequest(
           owner,
           repo,
           commentPayload.issue.number

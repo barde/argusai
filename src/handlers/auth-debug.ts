@@ -33,9 +33,21 @@ export async function debugCallbackHandler(c: Context<{ Bindings: Env }>) {
   // Try to validate state
   let stateValid = false;
   let storedState = null;
+  let allKeys: Array<{ name: string; expiration: string | null }> = [];
   if (state && c.env.OAUTH_SESSIONS) {
     storedState = await c.env.OAUTH_SESSIONS.get(`state:${state}`);
     stateValid = !!storedState;
+
+    // Debug: List all state keys
+    try {
+      const list = await c.env.OAUTH_SESSIONS.list({ prefix: 'state:', limit: 10 });
+      allKeys = list.keys.map((k) => ({
+        name: k.name,
+        expiration: k.expiration ? new Date(k.expiration * 1000).toISOString() : null,
+      }));
+    } catch (e) {
+      // Ignore errors
+    }
   }
 
   // Try token exchange without redirect_uri
@@ -86,6 +98,8 @@ export async function debugCallbackHandler(c: Context<{ Bindings: Env }>) {
       provided: !!state,
       stored: !!storedState,
       valid: stateValid,
+      stateKeys: allKeys,
+      requestedState: state,
     },
     token_exchange: tokenExchangeResult,
   });

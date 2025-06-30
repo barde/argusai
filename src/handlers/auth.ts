@@ -43,6 +43,9 @@ export async function loginHandler(c: Context<{ Bindings: Env }>) {
     await c.env.OAUTH_SESSIONS.put(`state:${state}`, 'valid', {
       expirationTtl: 600, // 10 minutes
     });
+    logger.info('Stored OAuth state', { state, key: `state:${state}` });
+  } else {
+    logger.warn('OAUTH_SESSIONS KV namespace not available');
   }
 
   const clientId = c.env.GITHUB_OAUTH_CLIENT_ID;

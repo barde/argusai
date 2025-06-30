@@ -92,6 +92,13 @@ export async function debugCallbackHandler(c: Context<{ Bindings: Env }>) {
     debug: true,
     environment: c.env.ENVIRONMENT,
     callback_url: getCallbackUrl(c),
+    public_url: c.env.PUBLIC_URL || 'not set',
+    request_url: c.req.url,
+    headers: {
+      host: c.req.header('host'),
+      'x-forwarded-host': c.req.header('x-forwarded-host'),
+      'x-forwarded-proto': c.req.header('x-forwarded-proto'),
+    },
     query_params: { code: !!code, state: !!state },
     config: debugInfo,
     state_validation: {

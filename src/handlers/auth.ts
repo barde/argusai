@@ -38,14 +38,48 @@ function generateState(): string {
 export async function loginHandler(c: Context<{ Bindings: Env }>) {
   const state = generateState();
 
+  logger.info('Starting OAuth login flow', {
+    state,
+    callbackUrl: getCallbackUrl(c),
+    environment: c.env.ENVIRONMENT,
+    hasOAuthSessions: !!c.env.OAUTH_SESSIONS,
+  });
+
   // Store state in KV with 10 minute TTL for CSRF protection
   if (c.env.OAUTH_SESSIONS) {
-    await c.env.OAUTH_SESSIONS.put(`state:${state}`, 'valid', {
-      expirationTtl: 600, // 10 minutes
-    });
-    logger.info('Stored OAuth state', { state, key: `state:${state}` });
+    try {
+      await c.env.OAUTH_SESSIONS.put(`state:${state}`, 'valid', {
+        expirationTtl: 600, // 10 minutes
+      });
+
+      // Verify the state was stored
+      const verifyStored = await c.env.OAUTH_SESSIONS.get(`state:${state}`);
+      logger.info('Stored OAuth state in KV', {
+        state,
+        key: `state:${state}`,
+        verified: !!verifyStored,
+        ttl: 600,
+      });
+
+      // List current states for debugging
+      const stateList = await c.env.OAUTH_SESSIONS.list({ prefix: 'state:', limit: 5 });
+      logger.info('Current states in KV', {
+        count: stateList.keys.length,
+        states: stateList.keys.map((k) => ({
+          name: k.name,
+          expiration: k.expiration ? new Date(k.expiration * 1000).toISOString() : null,
+        })),
+      });
+    } catch (error) {
+      logger.error('Failed to store OAuth state in KV', {
+        error: error instanceof Error ? error.message : String(error),
+        state,
+      });
+      return c.json({ error: 'Failed to initialize OAuth flow' }, 500);
+    }
   } else {
-    logger.warn('OAUTH_SESSIONS KV namespace not available');
+    logger.error('OAUTH_SESSIONS KV namespace not available - OAuth will fail');
+    return c.json({ error: 'OAuth not properly configured' }, 500);
   }
 
   const clientId = c.env.GITHUB_OAUTH_CLIENT_ID;
@@ -62,6 +96,13 @@ export async function loginHandler(c: Context<{ Bindings: Env }>) {
   authUrl.searchParams.set('redirect_uri', redirectUri);
   authUrl.searchParams.set('scope', scope);
   authUrl.searchParams.set('state', state);
+
+  logger.info('Redirecting to GitHub OAuth', {
+    authUrl: authUrl.toString(),
+    redirectUri,
+    clientId,
+    state,
+  });
 
   return c.redirect(authUrl.toString());
 }

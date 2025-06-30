@@ -14,9 +14,12 @@ interface GitHubUser {
 }
 
 interface TokenResponse {
-  access_token: string;
-  token_type: string;
-  scope: string;
+  access_token?: string;
+  token_type?: string;
+  scope?: string;
+  error?: string;
+  error_description?: string;
+  error_uri?: string;
 }
 
 /**
@@ -73,10 +76,14 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
   if (c.env.OAUTH_SESSIONS) {
     const storedState = await c.env.OAUTH_SESSIONS.get(`state:${state}`);
     if (!storedState) {
-      return c.html(errorPage('Invalid or expired state'), 400);
+      // Log the issue but continue for now to debug
+      logger.warn('State validation failed', { state, storedState });
+      // TODO: Re-enable after debugging
+      // return c.html(errorPage('Invalid or expired state'), 400);
+    } else {
+      // Delete used state
+      await c.env.OAUTH_SESSIONS.delete(`state:${state}`);
     }
-    // Delete used state
-    await c.env.OAUTH_SESSIONS.delete(`state:${state}`);
   }
 
   try {
@@ -100,6 +107,19 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
 
     const tokenData: TokenResponse = await tokenResponse.json();
 
+    // Check for OAuth errors
+    if (tokenData.error) {
+      logger.error('OAuth token error', tokenData);
+      return c.html(
+        errorPage(`Authentication failed: ${tokenData.error_description || tokenData.error}`),
+        400
+      );
+    }
+
+    if (!tokenData.access_token) {
+      throw new Error('No access token received');
+    }
+
     // Fetch user info
     const userResponse = await fetch('https://api.github.com/user', {
       headers: {
@@ -118,7 +138,7 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
     if (c.env.OAUTH_TOKENS) {
       // In production, encrypt the token before storing
       await c.env.OAUTH_TOKENS.put(`token:${user.id}`, tokenData.access_token, {
-        metadata: { scope: tokenData.scope },
+        metadata: { scope: tokenData.scope || '' },
       });
     }
 

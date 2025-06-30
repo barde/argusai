@@ -23,6 +23,7 @@ import {
 } from './handlers/auth';
 import { getUserRepos, enableRepo, disableRepo } from './handlers/repos';
 import { dashboardHandler } from './handlers/dashboard';
+import { debugCallbackHandler } from './handlers/auth-debug';
 import type { Env } from './types/env';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -74,6 +75,7 @@ app.get('/allowed-repos/:owner/:repo', checkAllowedRepoHandler);
 // OAuth authentication endpoints
 app.get('/auth/login', loginHandler);
 app.get('/auth/callback', callbackHandler);
+app.get('/auth/callback-debug', debugCallbackHandler);
 app.post('/auth/logout', logoutHandler);
 app.get('/auth/user', userHandler);
 

@@ -27,6 +27,7 @@ import { debugCallbackHandler } from './handlers/auth-debug';
 import { debugKVHandler } from './handlers/auth-debug-kv';
 import { oauthTestHandler } from './handlers/oauth-test';
 import { enhancedDebugCallbackHandler } from './handlers/auth-debug-enhanced';
+import { debugLoginHandler } from './handlers/auth-login-debug';
 import type { Env } from './types/env';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -77,6 +78,7 @@ app.get('/allowed-repos/:owner/:repo', checkAllowedRepoHandler);
 
 // OAuth authentication endpoints
 app.get('/auth/login', loginHandler);
+app.get('/auth/login-debug', debugLoginHandler);
 app.get('/auth/callback', callbackHandler);
 app.get('/auth/callback-debug', debugCallbackHandler);
 app.get('/auth/callback-debug-v2', enhancedDebugCallbackHandler);

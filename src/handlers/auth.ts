@@ -151,6 +151,22 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
 
   // Verify state for CSRF protection
   if (c.env.OAUTH_SESSIONS) {
+    // Check if this state was already used
+    const wasUsed = await c.env.OAUTH_SESSIONS.get(`used-state:${state}`);
+    if (wasUsed) {
+      logger.error('OAuth state/code reuse detected', {
+        state,
+        previousUse: JSON.parse(wasUsed),
+        currentCode: code.substring(0, 8) + '...',
+      });
+      return c.html(
+        errorPage(
+          'This authorization code has already been used. Please start the login process again.'
+        ),
+        400
+      );
+    }
+
     // Try primary namespace first
     let storedState = await c.env.OAUTH_SESSIONS.get(`state:${state}`);
 
@@ -174,7 +190,18 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
       if (c.env.CACHE) {
         await c.env.CACHE.delete(`oauth-state:${state}`);
       }
-      logger.info('Deleted used OAuth state', { state });
+
+      // Mark this state as used to detect reuse attempts
+      await c.env.OAUTH_SESSIONS.put(
+        `used-state:${state}`,
+        JSON.stringify({
+          usedAt: new Date().toISOString(),
+          code: code.substring(0, 8) + '...',
+        }),
+        { expirationTtl: 3600 } // Keep for 1 hour for debugging
+      );
+
+      logger.info('Deleted used OAuth state and marked as used', { state });
     }
   }
 

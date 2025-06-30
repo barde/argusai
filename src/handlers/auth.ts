@@ -83,8 +83,7 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
     if (!storedState) {
       // Log the issue but continue for now to debug
       logger.warn('State validation failed', { state, storedState });
-      // TODO: Re-enable after debugging
-      // return c.html(errorPage('Invalid or expired state'), 400);
+      return c.html(errorPage('Invalid or expired state'), 400);
     } else {
       // Delete used state
       await c.env.OAUTH_SESSIONS.delete(`state:${state}`);
@@ -103,8 +102,7 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
         client_id: c.env.GITHUB_OAUTH_CLIENT_ID,
         client_secret: c.env.GITHUB_OAUTH_CLIENT_SECRET,
         code,
-        // Note: redirect_uri is optional for GitHub OAuth
-        // If omitted, GitHub uses the registered callback URL
+        redirect_uri: getCallbackUrl(c),
       }),
     });
 

@@ -28,6 +28,7 @@ Intelligent GitHub code review bot powered by LLMs, deployed on Cloudflare Worke
 - [**Setup Guide**](docs/setup-guide.md) - How to configure ArgusAI for your repository
 - [**Reviewer Assignment Mode**](docs/reviewer-assignment-mode.md) - Detailed technical documentation
 - [**Usage Examples**](examples/trigger-review.md) - Examples of triggering reviews
+- [**Debug Mode**](docs/debug-mode.md) - Troubleshooting with debug endpoints
 
 ## 🔍 Monitoring & Status
 
@@ -106,6 +107,28 @@ curl -X POST https://argus.vogel.yoga/admin/allowed-repos \
 - **KV**: 100,000 reads/day, 1,000 writes/day free
 - **GitHub Models**: Completely free
 - **Total**: $0 for most teams
+
+## 🔧 Troubleshooting
+
+### Debug Mode
+ArgusAI includes a debug mode for troubleshooting OAuth and other issues:
+
+```bash
+# Enable debug mode in production (use with caution)
+# Update wrangler.toml: DEBUG_MODE = "true"
+wrangler deploy --env production
+
+# Access debug endpoints
+curl https://argus.vogel.yoga/auth/oauth-test
+curl https://argus.vogel.yoga/auth/debug-kv
+```
+
+**Important**: Debug mode exposes sensitive information. Only enable temporarily and disable immediately after troubleshooting. See [Debug Mode Documentation](docs/debug-mode.md) for details.
+
+### Common Issues
+- **OAuth Errors**: Use `/auth/callback-debug` endpoint with debug mode
+- **KV Storage Issues**: Check with `/auth/debug-kv` endpoint
+- **Webhook Failures**: Monitor with `wrangler tail --env production`
 
 ## 🤝 Contributing
 

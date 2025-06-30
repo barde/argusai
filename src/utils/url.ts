@@ -20,5 +20,5 @@ export function getPublicUrl(c: Context<{ Bindings: Env }>): string {
  * Get the OAuth callback URL
  */
 export function getCallbackUrl(c: Context<{ Bindings: Env }>): string {
-  return `${getPublicUrl(c)}/auth/callback`;
+  return `${getPublicUrl(c)}/auth/callback-debug`;
 }

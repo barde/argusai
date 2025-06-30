@@ -5,6 +5,7 @@ export interface Env {
   GITHUB_MODEL: string;
   LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error';
   PUBLIC_URL?: string; // Optional, will use request URL if not set
+  DEBUG_MODE?: string; // Enable debug endpoints when set to 'true'
 
   // Secrets
   GITHUB_APP_PRIVATE_KEY: string;

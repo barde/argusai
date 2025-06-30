@@ -27,7 +27,6 @@ import { debugCallbackHandler } from './handlers/auth-debug';
 import { debugKVHandler } from './handlers/auth-debug-kv';
 import { oauthTestHandler } from './handlers/oauth-test';
 import { enhancedDebugCallbackHandler } from './handlers/auth-debug-enhanced';
-import { debugLoginHandler } from './handlers/auth-login-debug';
 import type { Env } from './types/env';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -49,9 +48,9 @@ app.get('/status-page', (c) => {
   return c.redirect('/', 301);
 });
 
-// Debug endpoint (development only)
+// Debug endpoint (development only or when DEBUG_MODE is enabled)
 app.get('/debug', (c) => {
-  if (c.env.ENVIRONMENT !== 'development') {
+  if (c.env.ENVIRONMENT !== 'development' && c.env.DEBUG_MODE !== 'true') {
     return c.json({ error: 'Not available in production' }, 404);
   }
   return debugHandler(c);
@@ -78,14 +77,35 @@ app.get('/allowed-repos/:owner/:repo', checkAllowedRepoHandler);
 
 // OAuth authentication endpoints
 app.get('/auth/login', loginHandler);
-app.get('/auth/login-debug', debugLoginHandler);
 app.get('/auth/callback', callbackHandler);
-app.get('/auth/callback-debug', debugCallbackHandler);
-app.get('/auth/callback-debug-v2', enhancedDebugCallbackHandler);
-app.get('/auth/debug-kv', debugKVHandler);
-app.get('/auth/oauth-test', oauthTestHandler);
 app.post('/auth/logout', logoutHandler);
 app.get('/auth/user', userHandler);
+
+// Debug endpoints (only available when DEBUG_MODE is enabled)
+app.get('/auth/callback-debug', (c) => {
+  if (c.env.DEBUG_MODE !== 'true') {
+    return c.json({ error: 'Debug mode not enabled' }, 404);
+  }
+  return debugCallbackHandler(c);
+});
+app.get('/auth/callback-debug-v2', (c) => {
+  if (c.env.DEBUG_MODE !== 'true') {
+    return c.json({ error: 'Debug mode not enabled' }, 404);
+  }
+  return enhancedDebugCallbackHandler(c);
+});
+app.get('/auth/debug-kv', (c) => {
+  if (c.env.DEBUG_MODE !== 'true') {
+    return c.json({ error: 'Debug mode not enabled' }, 404);
+  }
+  return debugKVHandler(c);
+});
+app.get('/auth/oauth-test', (c) => {
+  if (c.env.DEBUG_MODE !== 'true') {
+    return c.json({ error: 'Debug mode not enabled' }, 404);
+  }
+  return oauthTestHandler(c);
+});
 
 // Protected API endpoints (require authentication)
 app.get('/api/user/repos', requireAuth, getUserRepos);

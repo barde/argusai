@@ -64,7 +64,7 @@ export async function debugCallbackHandler(c: Context<{ Bindings: Env }>) {
           client_id: c.env.GITHUB_OAUTH_CLIENT_ID,
           client_secret: c.env.GITHUB_OAUTH_CLIENT_SECRET,
           code,
-          // Omit redirect_uri to use GitHub's registered callback
+          redirect_uri: getCallbackUrl(c),
         }),
       });
 

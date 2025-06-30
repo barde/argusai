@@ -73,7 +73,16 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
   const code = c.req.query('code');
   const state = c.req.query('state');
 
+  logger.info('OAuth callback received', {
+    hasCode: !!code,
+    hasState: !!state,
+    state,
+    callbackUrl: c.req.url,
+    environment: c.env.ENVIRONMENT,
+  });
+
   if (!code || !state) {
+    logger.error('Missing OAuth parameters', { code: !!code, state: !!state });
     return c.html(errorPage('Missing authorization code or state'), 400);
   }
 
@@ -81,8 +90,13 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
   if (c.env.OAUTH_SESSIONS) {
     const storedState = await c.env.OAUTH_SESSIONS.get(`state:${state}`);
     if (!storedState) {
-      // Log the issue but continue for now to debug
-      logger.warn('State validation failed', { state, storedState });
+      // List all states for debugging
+      const stateList = await c.env.OAUTH_SESSIONS.list({ prefix: 'state:', limit: 10 });
+      logger.error('State validation failed - state not found in KV', {
+        state,
+        storedState,
+        availableStates: stateList.keys.map((k) => ({ name: k.name, expiration: k.expiration })),
+      });
       return c.html(errorPage('Invalid or expired state'), 400);
     } else {
       // Delete used state
@@ -92,18 +106,27 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
 
   try {
     // Exchange code for access token
+    const redirectUri = getCallbackUrl(c);
+    const tokenPayload = {
+      client_id: c.env.GITHUB_OAUTH_CLIENT_ID,
+      client_secret: c.env.GITHUB_OAUTH_CLIENT_SECRET,
+      code,
+      redirect_uri: redirectUri,
+    };
+
+    logger.info('Exchanging code for token', {
+      clientId: c.env.GITHUB_OAUTH_CLIENT_ID,
+      redirectUri,
+      codeLength: code.length,
+    });
+
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        client_id: c.env.GITHUB_OAUTH_CLIENT_ID,
-        client_secret: c.env.GITHUB_OAUTH_CLIENT_SECRET,
-        code,
-        redirect_uri: getCallbackUrl(c),
-      }),
+      body: JSON.stringify(tokenPayload),
     });
 
     if (!tokenResponse.ok) {
@@ -148,6 +171,11 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
     }
 
     // Generate JWT
+    if (!c.env.JWT_SECRET) {
+      logger.error('JWT_SECRET not configured');
+      return c.html(errorPage('Server configuration error'), 500);
+    }
+
     const jwt = await generateJWT(
       {
         sub: user.id.toString(),
@@ -155,7 +183,7 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
         name: user.name || undefined,
         avatar_url: user.avatar_url,
       },
-      c.env.JWT_SECRET || 'development-secret'
+      c.env.JWT_SECRET
     );
 
     // Set secure cookie and redirect to home

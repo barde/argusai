@@ -6,8 +6,7 @@ export default defineWorkersConfig({
       workers: {
         wrangler: { configPath: './wrangler.toml' },
         miniflare: {
-          kvNamespaces: ['CACHE', 'RATE_LIMITS', 'CONFIG'],
-          queues: ['REVIEW_QUEUE'],
+          kvNamespaces: ['CACHE', 'RATE_LIMITS', 'CONFIG', 'OAUTH_SESSIONS', 'OAUTH_TOKENS'],
         },
       },
     },

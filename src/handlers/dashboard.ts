@@ -577,8 +577,8 @@ function generateDashboardHTML(statusData: any, user: any, repositories: any[]):
         <li>ArgusAI will automatically review PRs based on your configuration</li>
       </ol>
       <p style="margin-top: 20px;">
-        <a href="https://github.com/apps/argusai" target="_blank" class="github-login-btn" style="display: inline-block;">
-          Manage ArgusAI Installation
+        <a href="https://github.com/settings/installations" target="_blank" class="github-login-btn" style="display: inline-block;">
+          Manage GitHub App Installations
         </a>
       </p>
     </div>

@@ -25,6 +25,7 @@ import { getUserRepos, enableRepo, disableRepo } from './handlers/repos';
 import { dashboardHandler } from './handlers/dashboard';
 import { debugCallbackHandler } from './handlers/auth-debug';
 import { debugKVHandler } from './handlers/auth-debug-kv';
+import { oauthTestHandler } from './handlers/oauth-test';
 import type { Env } from './types/env';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -78,6 +79,7 @@ app.get('/auth/login', loginHandler);
 app.get('/auth/callback', callbackHandler);
 app.get('/auth/callback-debug', debugCallbackHandler);
 app.get('/auth/debug-kv', debugKVHandler);
+app.get('/auth/oauth-test', oauthTestHandler);
 app.post('/auth/logout', logoutHandler);
 app.get('/auth/user', userHandler);
 

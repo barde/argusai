@@ -3,6 +3,7 @@ import { Env } from '../types/env';
 import { generateJWT, verifyJWT, extractJWTFromCookie } from '../utils/jwt';
 import { Logger } from '../utils/logger';
 import { getCallbackUrl } from '../utils/url';
+import { storeWithVerification } from '../utils/kv-retry';
 
 const logger = new Logger('auth');
 
@@ -47,33 +48,54 @@ export async function loginHandler(c: Context<{ Bindings: Env }>) {
 
   // Store state in KV with 10 minute TTL for CSRF protection
   if (c.env.OAUTH_SESSIONS) {
+    const startTime = Date.now();
     try {
-      await c.env.OAUTH_SESSIONS.put(`state:${state}`, 'valid', {
-        expirationTtl: 600, // 10 minutes
-      });
+      // Store with retry and verification
+      const stored = await storeWithVerification(
+        c.env.OAUTH_SESSIONS,
+        `state:${state}`,
+        'valid',
+        { expirationTtl: 600 } // 10 minutes
+      );
 
-      // Verify the state was stored
-      const verifyStored = await c.env.OAUTH_SESSIONS.get(`state:${state}`);
-      logger.info('Stored OAuth state in KV', {
+      const storageTime = Date.now() - startTime;
+      logger.info('OAuth state storage complete', {
         state,
         key: `state:${state}`,
-        verified: !!verifyStored,
+        verified: stored,
         ttl: 600,
+        storageTimeMs: storageTime,
       });
 
+      // Store in CACHE as fallback
+      if (c.env.CACHE) {
+        try {
+          await storeWithVerification(c.env.CACHE, `oauth-state:${state}`, 'valid', {
+            expirationTtl: 600,
+          });
+          logger.info('Stored state in CACHE fallback', { state });
+        } catch (cacheError) {
+          logger.warn('Failed to store in CACHE fallback', {
+            error: cacheError instanceof Error ? cacheError.message : String(cacheError),
+          });
+        }
+      }
+
       // List current states for debugging
-      const stateList = await c.env.OAUTH_SESSIONS.list({ prefix: 'state:', limit: 5 });
-      logger.info('Current states in KV', {
+      const stateList = await c.env.OAUTH_SESSIONS.list({ prefix: 'state:', limit: 10 });
+      logger.info('Current states in KV after storage', {
         count: stateList.keys.length,
         states: stateList.keys.map((k) => ({
           name: k.name,
           expiration: k.expiration ? new Date(k.expiration * 1000).toISOString() : null,
         })),
+        newStateIncluded: stateList.keys.some((k) => k.name === `state:${state}`),
       });
     } catch (error) {
-      logger.error('Failed to store OAuth state in KV', {
+      logger.error('Failed to store OAuth state in KV after retries', {
         error: error instanceof Error ? error.message : String(error),
         state,
+        timeElapsed: Date.now() - startTime,
       });
       return c.json({ error: 'Failed to initialize OAuth flow' }, 500);
     }
@@ -129,7 +151,14 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
 
   // Verify state for CSRF protection
   if (c.env.OAUTH_SESSIONS) {
-    const storedState = await c.env.OAUTH_SESSIONS.get(`state:${state}`);
+    // Try primary namespace first
+    let storedState = await c.env.OAUTH_SESSIONS.get(`state:${state}`);
+
+    // Fallback to CACHE namespace if not found
+    if (!storedState && c.env.CACHE) {
+      logger.warn('State not found in OAUTH_SESSIONS, checking CACHE fallback', { state });
+      storedState = await c.env.CACHE.get(`oauth-state:${state}`);
+    }
     if (!storedState) {
       // List all states for debugging
       const stateList = await c.env.OAUTH_SESSIONS.list({ prefix: 'state:', limit: 10 });
@@ -140,8 +169,12 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
       });
       return c.html(errorPage('Invalid or expired state'), 400);
     } else {
-      // Delete used state
+      // Delete used state from both namespaces
       await c.env.OAUTH_SESSIONS.delete(`state:${state}`);
+      if (c.env.CACHE) {
+        await c.env.CACHE.delete(`oauth-state:${state}`);
+      }
+      logger.info('Deleted used OAuth state', { state });
     }
   }
 

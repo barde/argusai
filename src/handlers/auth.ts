@@ -100,7 +100,8 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
         client_id: c.env.GITHUB_OAUTH_CLIENT_ID,
         client_secret: c.env.GITHUB_OAUTH_CLIENT_SECRET,
         code,
-        redirect_uri: getCallbackUrl(c),
+        // Note: redirect_uri is optional for GitHub OAuth
+        // If omitted, GitHub uses the registered callback URL
       }),
     });
 

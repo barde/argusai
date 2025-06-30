@@ -38,7 +38,7 @@ export async function debugCallbackHandler(c: Context<{ Bindings: Env }>) {
     stateValid = !!storedState;
   }
 
-  // Try token exchange
+  // Try token exchange without redirect_uri
   let tokenExchangeResult = null;
   if (code && c.env.GITHUB_OAUTH_CLIENT_ID && c.env.GITHUB_OAUTH_CLIENT_SECRET) {
     try {
@@ -52,7 +52,7 @@ export async function debugCallbackHandler(c: Context<{ Bindings: Env }>) {
           client_id: c.env.GITHUB_OAUTH_CLIENT_ID,
           client_secret: c.env.GITHUB_OAUTH_CLIENT_SECRET,
           code,
-          redirect_uri: getCallbackUrl(c),
+          // Omit redirect_uri to use GitHub's registered callback
         }),
       });
 

@@ -329,6 +329,39 @@ function generateDashboardHTML(statusData: any, user: any, repositories: any[]):
       margin-top: 12px;
       font-size: 14px;
       color: #6b7280;
+      align-items: center;
+    }
+    .refresh-btn {
+      margin-left: auto;
+      padding: 6px 12px;
+      background: #0969da;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .refresh-btn:hover {
+      background: #0860ca;
+    }
+    .refresh-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .refresh-btn.spinning svg {
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .cache-indicator {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-left: 8px;
     }
     .empty-state {
       text-align: center;
@@ -345,6 +378,86 @@ function generateDashboardHTML(statusData: any, user: any, repositories: any[]):
     }
   </style>
   <script>
+    // Cache management
+    const CACHE_KEY = 'argusai_status_cache';
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    const RATE_LIMIT_KEY = 'argusai_refresh_rate_limit';
+    const RATE_LIMIT_DURATION = 30 * 1000; // 30 seconds
+    
+    function getCachedStatus() {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (!cached) return null;
+      
+      const data = JSON.parse(cached);
+      const age = Date.now() - data.timestamp;
+      
+      if (age > CACHE_DURATION) {
+        localStorage.removeItem(CACHE_KEY);
+        return null;
+      }
+      
+      return data;
+    }
+    
+    function setCachedStatus(data) {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        ...data,
+        timestamp: Date.now(),
+        cached: true
+      }));
+    }
+    
+    function canRefresh() {
+      const lastRefresh = localStorage.getItem(RATE_LIMIT_KEY);
+      if (!lastRefresh) return true;
+      
+      const timeSinceRefresh = Date.now() - parseInt(lastRefresh);
+      return timeSinceRefresh > RATE_LIMIT_DURATION;
+    }
+    
+    function setRefreshTime() {
+      localStorage.setItem(RATE_LIMIT_KEY, Date.now().toString());
+    }
+    
+    function formatDate(date) {
+      return new Date(date).toLocaleString(navigator.language || 'en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      });
+    }
+    
+    async function refreshStatus() {
+      const btn = document.getElementById('refresh-btn');
+      const icon = btn.querySelector('svg');
+      const statusSection = document.getElementById('status-section');
+      
+      if (!canRefresh()) {
+        const lastRefresh = parseInt(localStorage.getItem(RATE_LIMIT_KEY));
+        const remainingTime = Math.ceil((RATE_LIMIT_DURATION - (Date.now() - lastRefresh)) / 1000);
+        alert('Please wait ' + remainingTime + ' seconds before refreshing again.');
+        return;
+      }
+      
+      btn.disabled = true;
+      btn.classList.add('spinning');
+      
+      try {
+        const response = await fetch('/status?format=json&refresh=true');
+        const data = await response.json();
+        
+        setCachedStatus(data);
+        setRefreshTime();
+        
+        // Update the display
+        window.location.reload();
+      } catch (error) {
+        alert('Failed to refresh status');
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('spinning');
+      }
+    }
+    
     async function toggleRepo(owner, repo, enabled) {
       const toggle = document.getElementById('toggle-' + owner + '-' + repo);
       const card = toggle.closest('.repo-card');
@@ -464,11 +577,20 @@ function generateDashboardHTML(statusData: any, user: any, repositories: any[]):
         : ''
   }
 
-  <div class="section">
+  <div class="section" id="status-section">
     <h2>🔧 System Status</h2>
     <div class="meta-info">
       <span>📍 Environment: ${statusData.environment}</span>
-      <span>🕐 Last updated: ${new Date(statusData.timestamp).toLocaleString()}</span>
+      <span>🕐 Last updated: <span id="last-updated">${new Date(statusData.timestamp).toLocaleString()}</span></span>
+      <span id="cache-indicator" class="cache-indicator" style="display: none;">(cached)</span>
+      <button id="refresh-btn" class="refresh-btn" onclick="refreshStatus()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        Refresh
+      </button>
     </div>
     <div style="margin-top: 16px;">
       ${statusData.checks
@@ -505,6 +627,32 @@ function generateDashboardHTML(statusData: any, user: any, repositories: any[]):
     </p>
     <p>Powered by Cloudflare Workers ⚡</p>
   </div>
+  
+  <script>
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      // Update date format to browser locale
+      const lastUpdatedEl = document.getElementById('last-updated');
+      if (lastUpdatedEl) {
+        const timestamp = '${statusData.timestamp}';
+        lastUpdatedEl.textContent = formatDate(timestamp);
+      }
+      
+      // Check if this is cached data
+      const cached = getCachedStatus();
+      if (cached && cached.timestamp) {
+        const cacheIndicator = document.getElementById('cache-indicator');
+        if (cacheIndicator) {
+          cacheIndicator.style.display = 'inline';
+        }
+      }
+      
+      // Cache the current status data if not already cached
+      if (!cached) {
+        setCachedStatus(${JSON.stringify(statusData)});
+      }
+    });
+  </script>
 </body>
 </html>
   `;

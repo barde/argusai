@@ -21,8 +21,29 @@ interface ModelQuota {
   error?: string;
 }
 
+const STATUS_CACHE_KEY = 'status:cache';
+const STATUS_CACHE_DURATION = 5 * 60; // 5 minutes in seconds
+
 export async function statusHandler(c: Context<{ Bindings: Env }>) {
   const format = c.req.query('format') || 'json';
+  const forceRefresh = c.req.query('refresh') === 'true';
+
+  // Try to get cached status if not forcing refresh
+  if (!forceRefresh && c.env.CACHE) {
+    try {
+      const cached = await c.env.CACHE.get(STATUS_CACHE_KEY, 'json');
+      if (cached) {
+        const data = cached as any;
+        // Add cache metadata
+        data.cached = true;
+        data.cacheAge = Math.floor((Date.now() - new Date(data.timestamp).getTime()) / 1000);
+        return c.json(data);
+      }
+    } catch (error) {
+      console.error('Cache read error:', error);
+    }
+  }
+
   const checks: StatusCheck[] = [];
   const modelQuotas: ModelQuota[] = [];
 
@@ -307,6 +328,17 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
     modelQuotas: modelQuotas.length > 0 ? modelQuotas : undefined,
     recentActivity: Object.keys(recentActivity).length > 0 ? recentActivity : undefined,
   };
+
+  // Cache the status data
+  if (c.env.CACHE) {
+    try {
+      await c.env.CACHE.put(STATUS_CACHE_KEY, JSON.stringify(statusData), {
+        expirationTtl: STATUS_CACHE_DURATION,
+      });
+    } catch (error) {
+      console.error('Cache write error:', error);
+    }
+  }
 
   // Return HTML if requested
   if (format === 'html') {

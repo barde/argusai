@@ -49,7 +49,8 @@ export async function loginHandler(c: Context<{ Bindings: Env }>) {
     return c.json({ error: 'OAuth not configured' }, 500);
   }
 
-  const redirectUri = `${new URL(c.req.url).origin}/auth/callback`;
+  // Ensure we use the exact same redirect URI that's configured in GitHub App
+  const redirectUri = 'https://argus.vogel.yoga/auth/callback';
   const scope = 'repo user';
 
   const authUrl = new URL('https://github.com/login/oauth/authorize');
@@ -98,6 +99,7 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
         client_id: c.env.GITHUB_OAUTH_CLIENT_ID,
         client_secret: c.env.GITHUB_OAUTH_CLIENT_SECRET,
         code,
+        redirect_uri: 'https://argus.vogel.yoga/auth/callback',
       }),
     });
 

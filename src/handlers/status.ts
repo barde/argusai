@@ -143,8 +143,8 @@ export async function statusHandler(c: Context<{ Bindings: Env }>) {
   if (isPKCS8Key && c.env.GITHUB_APP_ID && c.env.GITHUB_APP_PRIVATE_KEY) {
     try {
       const { GitHubAPIService } = await import('../services/github-api');
-      // Use a dummy installation ID for testing App authentication
-      const githubApi = new GitHubAPIService(c.env, 0);
+      // Create app-level auth without installation ID
+      const githubApi = new GitHubAPIService(c.env);
 
       // Try to get app info (this will test JWT generation)
       const testResult = await githubApi.testAppAuth();

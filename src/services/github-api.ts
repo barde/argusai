@@ -20,7 +20,7 @@ export class GitHubAPIService {
   private octokit: Octokit;
   private env: Env;
 
-  constructor(env: Env, installationId: number) {
+  constructor(env: Env, installationId?: number) {
     this.env = env;
     logger.info('=== GITHUB API INIT ===', {
       appId: env.GITHUB_APP_ID,
@@ -30,13 +30,20 @@ export class GitHubAPIService {
       privateKeyStart: env.GITHUB_APP_PRIVATE_KEY?.substring(0, 50) || 'NO KEY',
     });
 
+    // If no installationId provided, create app-level auth only
+    const authOptions: any = {
+      appId: parseInt(env.GITHUB_APP_ID),
+      privateKey: env.GITHUB_APP_PRIVATE_KEY,
+    };
+
+    // Only add installationId if it's a valid number > 0
+    if (installationId && installationId > 0) {
+      authOptions.installationId = installationId;
+    }
+
     this.octokit = new Octokit({
       authStrategy: createAppAuth,
-      auth: {
-        appId: parseInt(env.GITHUB_APP_ID),
-        privateKey: env.GITHUB_APP_PRIVATE_KEY,
-        installationId,
-      },
+      auth: authOptions,
     });
   }
 

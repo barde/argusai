@@ -174,10 +174,19 @@ export async function processReviewWithRetry(
   const maxAttempts = 3;
   let lastError: Error | undefined;
 
+  // Ensure we have a valid installation ID
+  if (!payload.installation?.id) {
+    logger.error('No installation ID in webhook payload', {
+      repository: payload.repository.full_name,
+      pr: payload.pull_request.number,
+    });
+    throw new Error('Missing installation ID in webhook payload');
+  }
+
   const reviewData: ReviewData = {
     repository: payload.repository.full_name,
     prNumber: payload.pull_request.number,
-    installationId: payload.installation?.id || 0,
+    installationId: payload.installation.id,
     action: payload.action,
     sha: payload.pull_request.head.sha,
     timestamp: Date.now(),

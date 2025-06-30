@@ -569,8 +569,18 @@ function generateDashboardHTML(statusData: any, user: any, repositories: any[]):
         ? `
   <div class="section">
     <div class="empty-state">
-      <h3>No Repositories Found</h3>
-      <p>You don't have any repositories yet. Create one on GitHub to get started!</p>
+      <h3>Repository Management</h3>
+      <p>To manage ArgusAI on your repositories:</p>
+      <ol style="text-align: left; max-width: 500px; margin: 20px auto;">
+        <li>Install the ArgusAI GitHub App on your repositories</li>
+        <li>Configure ArgusAI directly in your GitHub repository settings</li>
+        <li>ArgusAI will automatically review PRs based on your configuration</li>
+      </ol>
+      <p style="margin-top: 20px;">
+        <a href="https://github.com/apps/argusai" target="_blank" class="github-login-btn" style="display: inline-block;">
+          Manage ArgusAI Installation
+        </a>
+      </p>
     </div>
   </div>
   `

@@ -111,11 +111,9 @@ export async function loginHandler(c: Context<{ Bindings: Env }>) {
 
   // Get the callback URL dynamically
   const redirectUri = getCallbackUrl(c);
-  // Minimal scope needed for ArgusAI:
-  // - read:user: Get user info for display
-  // - public_repo: List and manage public repositories only
-  // Note: This does NOT grant access to private repos or their contents
-  const scope = 'read:user public_repo';
+  // Minimal scope: Only basic user info for authentication
+  // We'll fetch repos using the GitHub App installation instead of OAuth
+  const scope = 'read:user';
 
   const authUrl = new URL('https://github.com/login/oauth/authorize');
   authUrl.searchParams.set('client_id', clientId);

@@ -51,19 +51,32 @@ export async function getUserRepos(c: Context<{ Bindings: Env; Variables: { user
       return c.json({ error: 'Token not found' }, 401);
     }
 
-    // Fetch repositories from GitHub
-    const response = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+    // Fetch user info to get installations
+    const userResponse = await fetch('https://api.github.com/user', {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/vnd.github.v3+json',
       },
     });
 
-    if (!response.ok) {
-      throw new Error(`GitHub API error: ${response.status}`);
+    if (!userResponse.ok) {
+      throw new Error(`GitHub API error: ${userResponse.status}`);
     }
 
-    const repos: Repository[] = await response.json();
+    const userData = (await userResponse.json()) as { id: number; login: string };
+
+    // For now, return empty repos since we removed public_repo scope
+    // In a production app, you would:
+    // 1. Use GitHub App installations API to find where ArgusAI is installed
+    // 2. Only show repos where the user has access AND ArgusAI is installed
+    // This requires using the GitHub App's private key, not the user's OAuth token
+    logger.info('User repos endpoint called - returning empty list due to minimal OAuth scope', {
+      userId: userData.id,
+      login: userData.login,
+    });
+
+    // Return empty array for now
+    const repos: Repository[] = [];
 
     // Get user's repo configurations
     const configs = new Map<string, UserRepoConfig>();

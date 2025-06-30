@@ -4,6 +4,7 @@ export interface Env {
   GITHUB_APP_ID: string;
   GITHUB_MODEL: string;
   LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error';
+  PUBLIC_URL?: string; // Optional, will use request URL if not set
 
   // Secrets
   GITHUB_APP_PRIVATE_KEY: string;

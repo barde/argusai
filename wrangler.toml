@@ -85,6 +85,7 @@ LOG_LEVEL = "info"
 MAX_DIFF_SIZE = "500000"  # 500KB default
 CONCURRENT_FILE_REVIEWS = "3"  # Review 3 files in parallel
 UPDATE_EXISTING_REVIEWS = "true"  # Update existing reviews instead of creating new ones
+PUBLIC_URL = "https://argus.vogel.yoga"  # Base URL for OAuth callbacks
 
 # Copy KV namespaces to production environment
 [[env.production.kv_namespaces]]

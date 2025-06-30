@@ -1,5 +1,6 @@
 import { Context } from 'hono';
 import type { Env } from '../types/env';
+import { getCallbackUrl } from '../utils/url';
 
 export async function debugCallbackHandler(c: Context<{ Bindings: Env }>) {
   const { code, state, error, error_description } = c.req.query();
@@ -12,7 +13,7 @@ export async function debugCallbackHandler(c: Context<{ Bindings: Env }>) {
         details: {
           error,
           error_description,
-          callback_url: 'https://argus.vogel.yoga/auth/callback',
+          callback_url: getCallbackUrl(c),
         },
       },
       400
@@ -51,7 +52,7 @@ export async function debugCallbackHandler(c: Context<{ Bindings: Env }>) {
           client_id: c.env.GITHUB_OAUTH_CLIENT_ID,
           client_secret: c.env.GITHUB_OAUTH_CLIENT_SECRET,
           code,
-          redirect_uri: 'https://argus.vogel.yoga/auth/callback',
+          redirect_uri: getCallbackUrl(c),
         }),
       });
 
@@ -78,7 +79,7 @@ export async function debugCallbackHandler(c: Context<{ Bindings: Env }>) {
   return c.json({
     debug: true,
     environment: c.env.ENVIRONMENT,
-    callback_url: 'https://argus.vogel.yoga/auth/callback',
+    callback_url: getCallbackUrl(c),
     query_params: { code: !!code, state: !!state },
     config: debugInfo,
     state_validation: {

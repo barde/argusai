@@ -2,6 +2,7 @@ import { Context } from 'hono';
 import { Env } from '../types/env';
 import { generateJWT, verifyJWT, extractJWTFromCookie } from '../utils/jwt';
 import { Logger } from '../utils/logger';
+import { getCallbackUrl } from '../utils/url';
 
 const logger = new Logger('auth');
 
@@ -49,8 +50,8 @@ export async function loginHandler(c: Context<{ Bindings: Env }>) {
     return c.json({ error: 'OAuth not configured' }, 500);
   }
 
-  // Ensure we use the exact same redirect URI that's configured in GitHub App
-  const redirectUri = 'https://argus.vogel.yoga/auth/callback';
+  // Get the callback URL dynamically
+  const redirectUri = getCallbackUrl(c);
   const scope = 'repo user';
 
   const authUrl = new URL('https://github.com/login/oauth/authorize');
@@ -99,7 +100,7 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
         client_id: c.env.GITHUB_OAUTH_CLIENT_ID,
         client_secret: c.env.GITHUB_OAUTH_CLIENT_SECRET,
         code,
-        redirect_uri: 'https://argus.vogel.yoga/auth/callback',
+        redirect_uri: getCallbackUrl(c),
       }),
     });
 

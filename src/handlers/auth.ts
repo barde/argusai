@@ -2,7 +2,7 @@ import { Context } from 'hono';
 import { Env } from '../types/env';
 import { generateJWT, verifyJWT, extractJWTFromCookie } from '../utils/jwt';
 import { Logger } from '../utils/logger';
-import { getCallbackUrl } from '../utils/url';
+import { getCallbackUrl, getPublicUrl } from '../utils/url';
 import { storeWithVerification } from '../utils/kv-retry';
 
 const logger = new Logger('auth');
@@ -39,11 +39,20 @@ function generateState(): string {
 export async function loginHandler(c: Context<{ Bindings: Env }>) {
   const state = generateState();
 
+  const callbackUrl = getCallbackUrl(c);
+  const publicUrl = getPublicUrl(c);
+  
   logger.info('Starting OAuth login flow', {
     state,
-    callbackUrl: getCallbackUrl(c),
+    callbackUrl,
+    publicUrl,
+    envPublicUrl: c.env.PUBLIC_URL,
+    requestUrl: c.req.url,
+    requestHost: new URL(c.req.url).host,
     environment: c.env.ENVIRONMENT,
     hasOAuthSessions: !!c.env.OAUTH_SESSIONS,
+    hasClientId: !!c.env.GITHUB_OAUTH_CLIENT_ID,
+    hasClientSecret: !!c.env.GITHUB_OAUTH_CLIENT_SECRET,
   });
 
   // Store state in KV with 10 minute TTL for CSRF protection
@@ -110,7 +119,7 @@ export async function loginHandler(c: Context<{ Bindings: Env }>) {
   }
 
   // Get the callback URL dynamically
-  const redirectUri = getCallbackUrl(c);
+  const redirectUri = callbackUrl;
   // Minimal scope: Only basic user info for authentication
   // We'll fetch repos using the GitHub App installation instead of OAuth
   const scope = 'read:user';
@@ -126,6 +135,7 @@ export async function loginHandler(c: Context<{ Bindings: Env }>) {
     redirectUri,
     clientId,
     state,
+    authUrlParams: Object.fromEntries(authUrl.searchParams),
   });
 
   return c.redirect(authUrl.toString());
@@ -240,11 +250,34 @@ export async function callbackHandler(c: Context<{ Bindings: Env }>) {
 
     // Check for OAuth errors
     if (tokenData.error) {
-      logger.error('OAuth token error', tokenData);
-      return c.html(
-        errorPage(`Authentication failed: ${tokenData.error_description || tokenData.error}`),
-        400
-      );
+      logger.error('OAuth token error', {
+        error: tokenData.error,
+        error_description: tokenData.error_description,
+        error_uri: tokenData.error_uri,
+        clientId: c.env.GITHUB_OAUTH_CLIENT_ID,
+        redirectUri,
+        codePrefix: code.substring(0, 8),
+        state: state,
+        callbackUrl: c.req.url,
+        publicUrl: c.env.PUBLIC_URL,
+        derivedUrl: getPublicUrl(c)
+      });
+      
+      // Provide more specific error messages based on common GitHub OAuth errors
+      let errorMessage = 'Authentication failed';
+      if (tokenData.error === 'incorrect_client_credentials') {
+        errorMessage = 'Invalid client credentials. Please check your OAuth app configuration.';
+      } else if (tokenData.error === 'redirect_uri_mismatch') {
+        errorMessage = 'Redirect URI mismatch. The callback URL must exactly match your GitHub OAuth app settings.';
+      } else if (tokenData.error === 'bad_verification_code') {
+        errorMessage = 'Invalid or expired authorization code. Please try logging in again.';
+      } else if (tokenData.error_description) {
+        errorMessage = `Authentication failed: ${tokenData.error_description}`;
+      } else {
+        errorMessage = `Authentication failed: ${tokenData.error}`;
+      }
+      
+      return c.html(errorPage(errorMessage), 400);
     }
 
     if (!tokenData.access_token) {
